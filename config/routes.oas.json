@@ -249,7 +249,7 @@
         "operationId": "new-route-rpc"
       }
     },
-    "/modules": {
+    "/home/SafeContract/modules": {
       "x-zuplo-path": {
         "pathMode": "open-api"
       },
@@ -262,7 +262,7 @@
             "export": "urlForwardHandler",
             "module": "$import(@zuplo/runtime)",
             "options": {
-              "baseUrl": "http://159.65.192.47.nip.io/home/SafeContract"
+              "baseUrl": "http://159.65.192.47.nip.io"
             }
           },
           "policies": {
