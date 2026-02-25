@@ -262,7 +262,7 @@
             "export": "urlForwardHandler",
             "module": "$import(@zuplo/runtime)",
             "options": {
-              "baseUrl": "https://159.65.192.47"
+              "baseUrl": "https://159.65.192.47.nip.io"
             }
           },
           "policies": {
