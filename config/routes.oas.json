@@ -60,7 +60,9 @@
             }
           }
         },
-        "tags": ["Todo"]
+        "tags": [
+          "Todo"
+        ]
       },
       "post": {
         "summary": "Create a new todo",
@@ -112,7 +114,9 @@
             }
           }
         },
-        "tags": ["Todo"]
+        "tags": [
+          "Todo"
+        ]
       }
     },
     "/todos/{id}": {
@@ -180,7 +184,9 @@
             }
           }
         },
-        "tags": ["Todo"]
+        "tags": [
+          "Todo"
+        ]
       },
       "delete": {
         "summary": "Delete a todo",
@@ -215,7 +221,32 @@
             }
           }
         },
-        "tags": ["Todo"]
+        "tags": [
+          "Todo"
+        ]
+      }
+    },
+    "/rpc": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "post": {
+        "summary": "New Route",
+        "description": "",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "urlForwardHandler",
+            "module": "$import(@zuplo/runtime)",
+            "options": {
+              "baseUrl": "http://159.65.192.47:8545"
+            }
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "operationId": "new-route-rpc"
       }
     }
   },
@@ -241,7 +272,12 @@
             "description": "The user ID who owns the todo"
           }
         },
-        "required": ["id", "title", "completed", "userId"]
+        "required": [
+          "id",
+          "title",
+          "completed",
+          "userId"
+        ]
       },
       "CreateTodo": {
         "type": "object",
@@ -260,7 +296,10 @@
             "description": "The user ID who owns the todo"
           }
         },
-        "required": ["title", "userId"]
+        "required": [
+          "title",
+          "userId"
+        ]
       },
       "UpdateTodo": {
         "type": "object",
