@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --primary: #2cbe88;
+    --primary-light: #58d7a7;
+    --dark: #152d5b;
+    --light: #f1f5f9;
+    --light-border: #e2e8f0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-primary-900 antialiased;
+  }
+}
