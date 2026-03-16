@@ -25,7 +25,7 @@ if pm2 describe safe-contract-front >/dev/null 2>&1; then
   pm2 restart safe-contract-front --update-env
 else
   echo "==> Starting PM2 app from ecosystem config"
-  pm2 start ecosystem.config.js --env production
+  pm2 start ecosystem.config.cjs --env production
 fi
 
 echo "==> Saving PM2 process list"
