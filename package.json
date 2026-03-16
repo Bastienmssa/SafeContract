@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "zuplo dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start",
     "test": "zuplo test",
     "docs": "zuplo docs"
   },
