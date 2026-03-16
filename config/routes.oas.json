@@ -249,7 +249,7 @@
         "operationId": "new-route-rpc"
       }
     },
-    "/": {
+    "/(.*)": {
       "x-zuplo-path": {
         "pathMode": "open-api"
       },
