@@ -4,6 +4,76 @@
     "version": "1.0.0",
     "title": "My Zuplo API"
   },
+  "components": {
+    "schemas": {
+      "Todo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The todo ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "The todo title"
+          },
+          "completed": {
+            "type": "boolean",
+            "description": "Whether the todo is completed"
+          },
+          "userId": {
+            "type": "integer",
+            "description": "The user ID who owns the todo"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "completed",
+          "userId"
+        ]
+      },
+      "CreateTodo": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "The todo title"
+          },
+          "completed": {
+            "type": "boolean",
+            "description": "Whether the todo is completed",
+            "default": false
+          },
+          "userId": {
+            "type": "integer",
+            "description": "The user ID who owns the todo"
+          }
+        },
+        "required": [
+          "title",
+          "userId"
+        ]
+      },
+      "UpdateTodo": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "The todo title"
+          },
+          "completed": {
+            "type": "boolean",
+            "description": "Whether the todo is completed"
+          },
+          "userId": {
+            "type": "integer",
+            "description": "The user ID who owns the todo"
+          }
+        }
+      }
+    }
+  },
   "paths": {
     "/todos": {
       "get": {
@@ -251,10 +321,10 @@
     },
     "/": {
       "x-zuplo-path": {
-        "pathMode": "open-api"
+        "pathMode": "url-pattern"
       },
       "get": {
-        "summary": "Test Infra",
+        "summary": "Frontend",
         "description": "",
         "x-zuplo-route": {
           "corsPolicy": "none",
@@ -262,7 +332,7 @@
             "export": "urlForwardHandler",
             "module": "$import(@zuplo/runtime)",
             "options": {
-              "baseUrl": "http://159.65.192.47.nip.io"
+              "baseUrl": "http://159.65.192.47.nip.io:3000"
             }
           },
           "policies": {
@@ -270,76 +340,6 @@
           }
         },
         "operationId": "new-route-375f195c"
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "Todo": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "description": "The todo ID"
-          },
-          "title": {
-            "type": "string",
-            "description": "The todo title"
-          },
-          "completed": {
-            "type": "boolean",
-            "description": "Whether the todo is completed"
-          },
-          "userId": {
-            "type": "integer",
-            "description": "The user ID who owns the todo"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "completed",
-          "userId"
-        ]
-      },
-      "CreateTodo": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "description": "The todo title"
-          },
-          "completed": {
-            "type": "boolean",
-            "description": "Whether the todo is completed",
-            "default": false
-          },
-          "userId": {
-            "type": "integer",
-            "description": "The user ID who owns the todo"
-          }
-        },
-        "required": [
-          "title",
-          "userId"
-        ]
-      },
-      "UpdateTodo": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "description": "The todo title"
-          },
-          "completed": {
-            "type": "boolean",
-            "description": "Whether the todo is completed"
-          },
-          "userId": {
-            "type": "integer",
-            "description": "The user ID who owns the todo"
-          }
-        }
       }
     }
   }
