@@ -1,1 +1,4 @@
-# Dépendances Python
+fastapi
+uvicorn
+python-multipart
+mythril

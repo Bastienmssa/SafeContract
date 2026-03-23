@@ -17,7 +17,7 @@ export function Navbar() {
             Se connecter
           </Link>
           <Link
-            href="#analyse"
+            href="/free-analyse"
             className="text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 px-4 py-2 rounded-md transition-colors border border-primary-500"
           >
             Essai gratuit
