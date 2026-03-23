@@ -51,12 +51,12 @@ export default function FreeAnalysePage() {
 
       let res: Response;
       try {
-        res = await fetch("http://localhost:8000/scan", {
+        res = await fetch("/scan", {
           method: "POST",
           body: formData,
         });
       } catch {
-        throw new Error("Impossible de joindre le backend (http://localhost:8000). Vérifiez que le serveur est démarré.");
+        throw new Error("Impossible de joindre le backend via le gateway (/scan). Vérifiez que Zuplo et l'API sont démarrés.");
       }
 
       const json = await res.json();

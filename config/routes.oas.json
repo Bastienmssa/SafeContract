@@ -24,6 +24,25 @@
         "summary": "RPC"
       }
     },
+    "/scan": {
+      "post": {
+        "operationId": "backend-scan",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "module": "$import(@zuplo/runtime)",
+            "export": "urlForwardHandler",
+            "options": {
+              "baseUrl": "http://127.0.0.1:8000"
+            }
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "summary": "Backend scan"
+      }
+    },
     "/": {
       "get": {
         "operationId": "frontend-root",
