@@ -99,6 +99,23 @@
           }
         },
         "summary": "Head Front"
+      },
+      "post": {
+        "operationId": "frontend-catchall-post",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "module": "$import(@zuplo/runtime)",
+            "export": "urlForwardHandler",
+            "options": {
+              "baseUrl": "http://159.65.192.47.nip.io:3000"
+            }
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "summary": "Post Front"
       }
     }
   }
