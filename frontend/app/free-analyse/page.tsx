@@ -51,18 +51,34 @@ export default function FreeAnalysePage() {
 
       let res: Response;
       try {
-        res = await fetch("/scan", {
+        res = await fetch("/api/scan", {
           method: "POST",
           body: formData,
         });
       } catch {
-        throw new Error("Impossible de joindre le backend via le gateway (/scan). Vérifiez que Zuplo et l'API sont démarrés.");
+        throw new Error("Impossible de joindre le serveur. Vérifiez que le backend est démarré.");
       }
 
-      const json = await res.json();
+      const raw = await res.text();
+      let json: any = null;
+
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        json = null;
+      }
 
       if (!res.ok) {
-        throw new Error(json.detail ?? `Erreur HTTP ${res.status}`);
+        if (json?.detail) {
+          throw new Error(json.detail);
+        }
+        throw new Error(`Erreur HTTP ${res.status}: ${raw.slice(0, 200)}`);
+      }
+
+      if (json === null) {
+        throw new Error(
+          "La route /scan n'a pas renvoye du JSON (HTML recu). Verifiez que la requete passe bien par Zuplo et que la route POST /scan est active."
+        );
       }
 
       setResult(json);
