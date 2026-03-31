@@ -43,6 +43,47 @@
         "summary": "Backend scan"
       }
     },
+    "/analyses": {
+      "get": {
+        "operationId": "backend-analyses-list",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "module": "$import(@zuplo/runtime)",
+            "export": "urlForwardHandler",
+            "options": {
+              "baseUrl": "http://127.0.0.1:8000"
+            }
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "summary": "List analyses"
+      }
+    },
+    "/analyses/:id": {
+      "x-zuplo-path": {
+        "pathMode": "url-pattern"
+      },
+      "get": {
+        "operationId": "backend-analyses-get",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "module": "$import(@zuplo/runtime)",
+            "export": "urlForwardHandler",
+            "options": {
+              "baseUrl": "http://127.0.0.1:8000"
+            }
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "summary": "Get analysis by id"
+      }
+    },
     "/": {
       "get": {
         "operationId": "frontend-root",

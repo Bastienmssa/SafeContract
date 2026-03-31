@@ -18,6 +18,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const json = await backendRes.json();
+  const text = await backendRes.text();
+
+  if (!text) {
+    return NextResponse.json(
+      { detail: `Le backend a renvoyé une réponse vide (HTTP ${backendRes.status}).` },
+      { status: backendRes.status || 502 }
+    );
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return NextResponse.json(
+      { detail: `Réponse non-JSON du backend : ${text.slice(0, 200)}` },
+      { status: 502 }
+    );
+  }
+
   return NextResponse.json(json, { status: backendRes.status });
 }
