@@ -11,7 +11,7 @@ export function Navbar() {
         </Link>
         <div className="flex items-center gap-4 sm:gap-6">
           <Link
-            href="#connexion"
+            href="/connexion"
             className="text-sm font-medium text-slate-600 hover:text-primary-500 transition-colors"
           >
             Se connecter

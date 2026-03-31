@@ -1,0 +1,38 @@
+from fastapi import APIRouter, HTTPException
+from bson import ObjectId
+from app.database.mongodb import get_db
+
+router = APIRouter()
+
+
+def _serialize(doc: dict) -> dict:
+    analyzed_at = doc.get("analyzed_at")
+    return {
+        "id": str(doc["_id"]),
+        "filename": doc.get("filename", ""),
+        "code": doc.get("code", ""),
+        "score": doc.get("score", 0),
+        "issues": doc.get("issues", []),
+        "analyzed_at": analyzed_at.isoformat() if hasattr(analyzed_at, "isoformat") else str(analyzed_at),
+        "status": doc.get("status", "completed"),
+    }
+
+
+@router.get("/analyses")
+async def list_analyses():
+    db = get_db()
+    cursor = db.analyses.find().sort("analyzed_at", -1)
+    return [_serialize(doc) async for doc in cursor]
+
+
+@router.get("/analyses/{analysis_id}")
+async def get_analysis(analysis_id: str):
+    db = get_db()
+    try:
+        oid = ObjectId(analysis_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    doc = await db.analyses.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Analyse non trouvée")
+    return _serialize(doc)
