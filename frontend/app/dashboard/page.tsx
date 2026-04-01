@@ -21,6 +21,8 @@ import {
   X,
   Loader2,
   ArrowRight,
+  Bot,
+  Sparkles,
 } from "lucide-react";
 import { Contract, Issue, Severity } from "./data";
 
@@ -115,9 +117,33 @@ function buildContracts(analyses: RawAnalysis[]): Contract[] {
   });
 }
 
+// ─── Tool definitions ─────────────────────────────────────────────────────────
+
+const TOOLS = [
+  {
+    id: "mythril" as const,
+    name: "Mythril",
+    description: "Exécution symbolique — détecte reentrancy, overflows, accès non autorisés.",
+    icon: ScanSearch,
+    required: true,
+    available: true,
+  },
+  {
+    id: "ai" as const,
+    name: "Intelligence Artificielle",
+    description: "Modèle IA SafeContract — repasse sur les résultats et détecte des failles supplémentaires.",
+    icon: Bot,
+    required: false,
+    available: false,
+  },
+];
+
+type ToolId = "mythril" | "ai";
+
 // ─── AnalyseScan component ────────────────────────────────────────────────────
 
 function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
+  const [selectedTools, setSelectedTools] = useState<Set<ToolId>>(new Set<ToolId>(["mythril"]));
   const [contractText, setContractText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -125,6 +151,26 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasInput = uploadedFile !== null || contractText.trim().length > 0;
+
+  // AI can only be toggled if no other optional (non-mythril, non-ai) tool is selected
+  const canToggleAi = !Array.from(selectedTools).some((t) => t !== "mythril" && t !== "ai");
+
+  function toggleTool(id: ToolId, required: boolean) {
+    if (required) return;
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        // Adding AI: only allowed if no other optional tool is active
+        if (id === "ai" && !canToggleAi) return prev;
+        // Adding any non-AI optional tool: deselect AI automatically
+        if (id !== "ai") next.delete("ai");
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -173,6 +219,72 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+
+      {/* Tool selector */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+          <Sparkles className="w-4 h-4 text-primary-500" />
+          Outils d&apos;analyse
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {TOOLS.map(({ id, name, description, icon: Icon, required, available }) => {
+            const checked = selectedTools.has(id);
+            const isAiLocked = id === "ai" && !canToggleAi;
+            const disabled = required || !available || isAiLocked;
+
+            return (
+              <button
+                key={id}
+                type="button"
+                disabled={disabled && !checked}
+                onClick={() => toggleTool(id, required)}
+                className={`relative text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 transition-all ${
+                  disabled && !checked
+                    ? "opacity-50 cursor-not-allowed border-slate-200 bg-slate-50"
+                    : checked
+                    ? "border-primary-400 bg-primary-50 shadow-sm"
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                {/* Checkbox */}
+                <div className={`mt-0.5 w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-all ${
+                  checked ? "border-primary-500 bg-primary-500" : "border-slate-300 bg-white"
+                }`}>
+                  {checked && (
+                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                      <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <Icon className={`w-4 h-4 shrink-0 ${checked ? "text-primary-500" : "text-slate-400"}`} />
+                    <span className="text-sm font-semibold text-slate-800">{name}</span>
+                    {required && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-100 text-primary-600 uppercase tracking-wide">
+                        Requis
+                      </span>
+                    )}
+                    {!available && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase tracking-wide">
+                        Bientôt
+                      </span>
+                    )}
+                    {available && !required && isAiLocked && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 uppercase tracking-wide">
+                        Incompatible
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* File upload zone */}
       <div>
         <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
