@@ -605,8 +605,14 @@ export default function DashboardPage() {
       {/* Sidebar */}
       <aside className="w-56 shrink-0 bg-white border-r border-slate-200 flex flex-col">
         <div className="h-16 flex items-center px-4 border-b border-slate-200">
-          <Link href="/">
+          <Link href="/" className="flex items-center gap-2">
             <img src="/images/SafeContract-Logo.png" alt="SafeContract" className="h-7 w-auto" />
+            <span
+              className="font-bold text-sm tracking-tight"
+              style={{ background: "linear-gradient(135deg, #2cbe88 0%, #152d5b 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}
+            >
+              SafeContract
+            </span>
           </Link>
         </div>
 

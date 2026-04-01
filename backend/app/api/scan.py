@@ -1,11 +1,13 @@
 import tempfile
 import os
+import logging
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.services.mythril_service import analyze_contract
 from app.database.mongodb import get_db
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _map_severity(s: str) -> str:
@@ -56,19 +58,25 @@ async def scan_contract(file: UploadFile = File(...)):
     ]
     score = _compute_score(issues)
 
+    inserted_id = None
     db = get_db()
-    result = await db.analyses.insert_one({
-        "filename": file.filename,
-        "code": code,
-        "score": score,
-        "issues": issues,
-        "raw_report": report,
-        "analyzed_at": datetime.utcnow(),
-        "status": "completed",
-    })
+    if db is not None:
+        try:
+            result = await db.analyses.insert_one({
+                "filename": file.filename,
+                "code": code,
+                "score": score,
+                "issues": issues,
+                "raw_report": report,
+                "analyzed_at": datetime.utcnow(),
+                "status": "completed",
+            })
+            inserted_id = str(result.inserted_id)
+        except Exception as e:
+            logger.warning("MongoDB insert failed: %s", e)
 
     return {
         "status": "completed",
-        "id": str(result.inserted_id),
+        "id": inserted_id,
         "report": report,
     }
