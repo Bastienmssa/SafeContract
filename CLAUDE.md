@@ -31,13 +31,29 @@ npm run docs         # generate API docs
 ### Backend (FastAPI + Mythril + MongoDB)
 ```bash
 cd backend
-pip install fastapi uvicorn mythril motor python-dotenv
+pip install -r requirements.txt
 uvicorn app.main:app --reload    # dev server (port 8000 par défaut)
 ```
 
 L'outil CLI Mythril (`myth`) doit être disponible dans le PATH — invoqué via `subprocess` dans `app/services/mythril_service.py`.
 
 MongoDB doit tourner sur `localhost:27017` (configurable via `MONGODB_URL` dans `backend/.env`).
+
+### Security Tools (optional, local)
+```bash
+# Python-based tools
+pip install -r backend/requirements-tools.txt
+
+# Node-based tools
+npm install -g solhint
+
+# Foundry
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+
+# Echidna (Homebrew)
+brew install echidna
+```
 
 ### Production / PM2
 ```bash

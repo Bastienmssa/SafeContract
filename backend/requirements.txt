@@ -1,3 +1,4 @@
+# Backend runtime dependencies (API + scan + MongoDB)
 fastapi
 uvicorn
 python-multipart

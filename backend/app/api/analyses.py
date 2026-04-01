@@ -13,6 +13,8 @@ def _serialize(doc: dict) -> dict:
         "code": doc.get("code", ""),
         "score": doc.get("score", 0),
         "issues": doc.get("issues", []),
+        "tools_used": doc.get("tools_used", []),
+        "tools_errors": doc.get("tools_errors", {}),
         "analyzed_at": analyzed_at.isoformat() if hasattr(analyzed_at, "isoformat") else str(analyzed_at),
         "status": doc.get("status", "completed"),
     }

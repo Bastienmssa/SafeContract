@@ -23,61 +23,56 @@ import {
   ArrowRight,
   Bot,
   Sparkles,
+  Search,
 } from "lucide-react";
 import { Contract, Issue, Severity } from "./data";
 
-// ─── Mythril output → Contract mapper ────────────────────────────────────────
+// ─── Aggregated report → Contract mapper ─────────────────────────────────────
 
-interface MythrilIssue {
-  lineno: number;
-  severity: string;
+interface AggregatedIssue {
+  tool: string;
   title: string;
   description: string;
-  "swc-id": string;
-  code: string;
-  contract: string;
+  severity: string;
+  line: number | null;
+  swcId: string;
+  confidence: string;
 }
 
-interface MythrilReport {
-  success: boolean;
-  error: string | null;
-  issues: MythrilIssue[];
+interface AggregatedReport {
+  score: number;
+  issues: AggregatedIssue[];
+  tools_used: string[];
+  tools_errors: Record<string, string>;
+  tools_versions?: Record<string, string>;
+  summary: { critical: number; medium: number; low: number; total: number };
 }
 
-function mapSeverity(s: string): Severity {
-  const l = s.toLowerCase();
-  if (l === "high") return "critical";
-  if (l === "medium") return "medium";
-  return "low";
-}
-
-function mythrilToContract(report: MythrilReport, filename: string, code: string): Contract {
+function reportToContract(report: AggregatedReport, filename: string, code: string): Contract {
   const issues: Issue[] = report.issues.map((i) => ({
-    line: i.lineno,
-    severity: mapSeverity(i.severity),
+    line: i.line ?? 0,
+    severity: (i.severity === "critical" || i.severity === "medium" || i.severity === "low"
+      ? i.severity
+      : "low") as Severity,
     title: i.title,
     desc: i.description,
-    swcId: `SWC-${i["swc-id"]}`,
+    swcId: i.swcId || "",
+    tool: i.tool,
   }));
-
-  const criticals = issues.filter((i) => i.severity === "critical").length;
-  const mediums = issues.filter((i) => i.severity === "medium").length;
-  const lows = issues.filter((i) => i.severity === "low").length;
-
-  // Score heuristic: start 100, -25 per critical, -10 per medium, -5 per low
-  const raw = 100 - criticals * 25 - mediums * 10 - lows * 5;
-  const score = Math.max(0, Math.min(100, raw));
 
   const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 
   return {
     id: String(Date.now()),
     name: filename,
-    score,
+    score: report.score,
     lastAnalyzed: new Date().toISOString().slice(0, 10),
     issues,
-    timeline: [{ date: today, score }],
+    timeline: [{ date: today, score: report.score }],
     code,
+    toolsUsed: report.tools_used,
+    toolsErrors: report.tools_errors,
+    toolsVersions: report.tools_versions,
   };
 }
 
@@ -89,6 +84,8 @@ interface RawAnalysis {
   code: string;
   score: number;
   issues: Issue[];
+  tools_used: string[];
+  tools_errors: Record<string, string>;
   analyzed_at: string;
   status: string;
 }
@@ -113,37 +110,58 @@ function buildContracts(analyses: RawAnalysis[]): Contract[] {
       lastAnalyzed: latest.analyzed_at.slice(0, 10),
       timeline,
       code: latest.code,
+      toolsUsed: latest.tools_used,
+      toolsErrors: latest.tools_errors,
     };
   });
 }
 
-// ─── Tool definitions ─────────────────────────────────────────────────────────
+// ─── Tool packages ────────────────────────────────────────────────────────────
 
-const TOOLS = [
+type PackageId = "statique" | "dynamique";
+
+const PACKAGES: {
+  id: PackageId;
+  name: string;
+  description: string;
+  tools: string[];
+  icon: React.ElementType;
+  available: boolean;
+}[] = [
   {
-    id: "mythril" as const,
-    name: "Mythril",
-    description: "Exécution symbolique — détecte reentrancy, overflows, accès non autorisés.",
-    icon: ScanSearch,
-    required: true,
+    id: "statique",
+    name: "Analyse Statique",
+    description: "Slither + Solhint — lecture du code source, détection de patterns dangereux et bonnes pratiques.",
+    tools: ["slither", "solhint"],
+    icon: Search,
     available: true,
   },
   {
-    id: "ai" as const,
-    name: "Intelligence Artificielle",
-    description: "Modèle IA SafeContract — repasse sur les résultats et détecte des failles supplémentaires.",
-    icon: Bot,
-    required: false,
-    available: false,
+    id: "dynamique",
+    name: "Analyse Dynamique",
+    description: "Mythril + Foundry + Echidna — exécution symbolique, fuzzing et compilation.",
+    tools: ["mythril", "foundry", "echidna"],
+    icon: ScanSearch,
+    available: true,
   },
 ];
 
-type ToolId = "mythril" | "ai";
+const STATIC_TOOLS = ["slither", "solhint"];
+const DYNAMIC_TOOLS = ["mythril", "foundry", "echidna"];
+
+const TOOL_LABELS: Record<string, string> = {
+  mythril: "Mythril",
+  slither: "Slither",
+  solhint: "Solhint",
+  echidna: "Echidna",
+  foundry: "Foundry",
+  ai: "IA SafeContract",
+};
 
 // ─── AnalyseScan component ────────────────────────────────────────────────────
 
 function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
-  const [selectedTools, setSelectedTools] = useState<Set<ToolId>>(new Set<ToolId>(["mythril"]));
+  const [selectedPackages, setSelectedPackages] = useState<Set<PackageId>>(new Set<PackageId>(["dynamique"]));
   const [contractText, setContractText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -152,24 +170,25 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
 
   const hasInput = uploadedFile !== null || contractText.trim().length > 0;
 
-  // AI can only be toggled if no other optional (non-mythril, non-ai) tool is selected
-  const canToggleAi = !Array.from(selectedTools).some((t) => t !== "mythril" && t !== "ai");
-
-  function toggleTool(id: ToolId, required: boolean) {
-    if (required) return;
-    setSelectedTools((prev) => {
+  function togglePackage(id: PackageId) {
+    setSelectedPackages((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
+        // Ne pas désélectionner si c'est le seul package sélectionné
+        if (next.size === 1) return prev;
         next.delete(id);
       } else {
-        // Adding AI: only allowed if no other optional tool is active
-        if (id === "ai" && !canToggleAi) return prev;
-        // Adding any non-AI optional tool: deselect AI automatically
-        if (id !== "ai") next.delete("ai");
         next.add(id);
       }
       return next;
     });
+  }
+
+  function getSelectedTools(): string[] {
+    const tools: string[] = [];
+    if (selectedPackages.has("statique")) tools.push(...STATIC_TOOLS);
+    if (selectedPackages.has("dynamique")) tools.push(...DYNAMIC_TOOLS);
+    return tools;
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -197,6 +216,7 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
 
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("tools", JSON.stringify(getSelectedTools()));
 
       let res: Response;
       try {
@@ -208,7 +228,7 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.detail ?? `Erreur HTTP ${res.status}`);
 
-      const contract = mythrilToContract(json.report ?? json, filename, code);
+      const contract = reportToContract(json.report ?? json, filename, code);
       setStatus("idle");
       onResult(contract);
     } catch (err: unknown) {
@@ -220,26 +240,23 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
 
-      {/* Tool selector */}
+      {/* Package selector */}
       <div>
         <p className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
           <Sparkles className="w-4 h-4 text-primary-500" />
-          Outils d&apos;analyse
+          Type d&apos;analyse
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {TOOLS.map(({ id, name, description, icon: Icon, required, available }) => {
-            const checked = selectedTools.has(id);
-            const isAiLocked = id === "ai" && !canToggleAi;
-            const disabled = required || !available || isAiLocked;
-
+          {PACKAGES.map(({ id, name, description, tools, icon: Icon, available }) => {
+            const checked = selectedPackages.has(id);
             return (
               <button
                 key={id}
                 type="button"
-                disabled={disabled && !checked}
-                onClick={() => toggleTool(id, required)}
+                disabled={!available}
+                onClick={() => togglePackage(id)}
                 className={`relative text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 transition-all ${
-                  disabled && !checked
+                  !available
                     ? "opacity-50 cursor-not-allowed border-slate-200 bg-slate-50"
                     : checked
                     ? "border-primary-400 bg-primary-50 shadow-sm"
@@ -261,28 +278,42 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                     <Icon className={`w-4 h-4 shrink-0 ${checked ? "text-primary-500" : "text-slate-400"}`} />
                     <span className="text-sm font-semibold text-slate-800">{name}</span>
-                    {required && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-100 text-primary-600 uppercase tracking-wide">
-                        Requis
-                      </span>
-                    )}
                     {!available && (
                       <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase tracking-wide">
                         Bientôt
                       </span>
                     )}
-                    {available && !required && isAiLocked && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 uppercase tracking-wide">
-                        Incompatible
-                      </span>
-                    )}
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-2">{description}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {tools.map((t) => (
+                      <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${checked ? "bg-primary-100 text-primary-600" : "bg-slate-100 text-slate-500"}`}>
+                        {TOOL_LABELS[t] ?? t}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </button>
             );
           })}
         </div>
+
+        {/* AI - coming soon */}
+        <button
+          type="button"
+          disabled
+          className="mt-3 w-full text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed"
+        >
+          <div className="mt-0.5 w-4 h-4 rounded border-2 border-slate-300 bg-white shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <Bot className="w-4 h-4 text-slate-400" />
+              <span className="text-sm font-semibold text-slate-500">Intelligence Artificielle</span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase tracking-wide">Bientôt</span>
+            </div>
+            <p className="text-xs text-slate-400">Modèle IA SafeContract — repasse sur les résultats et détecte des failles supplémentaires.</p>
+          </div>
+        </button>
       </div>
 
       {/* File upload zone */}
@@ -366,6 +397,13 @@ function scoreLabel(score: number) {
   if (score >= 80) return "Sûr";
   if (score >= 50) return "Risque modéré";
   return "Critique";
+}
+
+function computeToolScore(issues: Issue[]): number {
+  const c = issues.filter((i) => i.severity === "critical").length;
+  const m = issues.filter((i) => i.severity === "medium").length;
+  const l = issues.filter((i) => i.severity === "low").length;
+  return Math.max(0, Math.min(100, 100 - c * 25 - m * 10 - l * 5));
 }
 
 function SeverityBadge({ s }: { s: Severity }) {
@@ -487,6 +525,93 @@ function SecurityTimeline({ timeline }: { timeline: { date: string; score: numbe
 
 // ─── Code & Diagnostic ───────────────────────────────────────────────────────
 
+function ToolScoreGrid({ contract }: { contract: Contract }) {
+  const tools = contract.toolsUsed ?? [];
+  if (tools.length === 0) return null;
+
+  const staticToolsUsed = tools.filter((t) => STATIC_TOOLS.includes(t));
+  const dynamicToolsUsed = tools.filter((t) => DYNAMIC_TOOLS.includes(t));
+
+  const staticIssues = contract.issues.filter((i) => STATIC_TOOLS.includes(i.tool ?? ""));
+  const dynamicIssues = contract.issues.filter((i) => DYNAMIC_TOOLS.includes(i.tool ?? ""));
+
+  const hasStatic = staticToolsUsed.length > 0;
+  const hasDynamic = dynamicToolsUsed.length > 0;
+
+  const staticScore = hasStatic ? computeToolScore(staticIssues) : null;
+  const dynamicScore = hasDynamic ? computeToolScore(dynamicIssues) : null;
+
+  const packages = [
+    hasStatic && {
+      id: "statique",
+      label: "Analyse Statique",
+      score: staticScore!,
+      tools: staticToolsUsed,
+      issues: staticIssues,
+      icon: Search,
+    },
+    hasDynamic && {
+      id: "dynamique",
+      label: "Analyse Dynamique",
+      score: dynamicScore!,
+      tools: dynamicToolsUsed,
+      issues: dynamicIssues,
+      icon: ScanSearch,
+    },
+  ].filter(Boolean) as { id: string; label: string; score: number; tools: string[]; issues: Issue[]; icon: React.ElementType }[];
+
+  return (
+    <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Scores par type d&apos;analyse</p>
+        <span className="text-xs text-slate-400">Score global : <span className={`font-bold ${scoreColor(contract.score).text}`}>{contract.score}/100</span></span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {packages.map(({ id, label, score, tools: pkgTools, issues: pkgIssues, icon: Icon }) => {
+          const { text, ring } = scoreColor(score);
+          return (
+            <div key={id} className="flex flex-col gap-2 px-4 py-3 rounded-lg bg-white border border-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Icon className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-xs font-semibold text-slate-600">{label}</span>
+                </div>
+                <span className={`text-xl font-bold ${text}`}>{score}</span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: ring }} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-wrap gap-1">
+                  {pkgTools.map((t) => {
+                    const version = contract.toolsVersions?.[t];
+                    return (
+                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-medium" title={version ? `v${version}` : undefined}>
+                        {TOOL_LABELS[t] ?? t}{version ? <span className="text-slate-400 font-normal"> v{version}</span> : null}
+                      </span>
+                    );
+                  })}
+                </div>
+                <span className="text-[10px] text-slate-400">{pkgIssues.length} issue{pkgIssues.length !== 1 ? "s" : ""}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {contract.toolsErrors && Object.keys(contract.toolsErrors).length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-medium text-slate-400">Non disponibles :</span>
+          {Object.entries(contract.toolsErrors).map(([tool, err]) => (
+            <span key={tool} title={err} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200">
+              {TOOL_LABELS[tool] ?? tool}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CodeDiagnostic({ contract }: { contract: Contract }) {
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const lines = contract.code.split("\n");
@@ -502,6 +627,7 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
   return (
     <div>
       <h3 className="text-sm font-semibold text-slate-700 mb-3">Code & Diagnostic</h3>
+      <ToolScoreGrid contract={contract} />
       <div className="flex gap-3">
         {/* Code panel */}
         <div className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-950 overflow-hidden">
@@ -558,6 +684,68 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
         </div>
       </div>
 
+      {contract.issues.length === 0 && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          Aucune vulnérabilité détectée — contrat sain.
+        </div>
+      )}
+
+      {/* Issues grouped by tool */}
+      {contract.issues.length > 0 && (() => {
+        const toolOrder = Array.from(new Set(contract.issues.map((i) => i.tool ?? "unknown")));
+        return (
+          <div className="mt-4 space-y-4">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Vulnérabilités par outil</p>
+            {toolOrder.map((tool) => {
+              const toolIssues = contract.issues.filter((i) => (i.tool ?? "unknown") === tool);
+              const toolScore = computeToolScore(toolIssues);
+              const { text } = scoreColor(toolScore);
+              return (
+                <div key={tool}>
+                  {/* Tool header */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-px flex-1 bg-slate-100" />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-semibold text-slate-500">
+                        {TOOL_LABELS[tool] ?? tool}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {toolIssues.length} issue{toolIssues.length !== 1 ? "s" : ""}
+                      </span>
+                      <span className={`text-xs font-bold ${text}`}>{toolScore}/100</span>
+                    </div>
+                    <div className="h-px flex-1 bg-slate-100" />
+                  </div>
+                  {/* Tool issues */}
+                  <div className="space-y-1.5">
+                    {toolIssues.map((issue, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedIssue(issue === selectedIssue ? null : issue)}
+                        className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                          selectedIssue === issue ? "bg-slate-100 border-slate-300" : "bg-white border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <SeverityIcon s={issue.severity} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-slate-800">{issue.title}</span>
+                            <SeverityBadge s={issue.severity} />
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5 truncate">{issue.desc}</p>
+                        </div>
+                        <span className="text-xs text-slate-400 shrink-0">L.{issue.line}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* Issue detail panel */}
       {selectedIssue && (
         <div className={`mt-3 p-4 rounded-lg border text-sm ${
@@ -568,48 +756,15 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
             : "bg-blue-50 border-blue-200"
         }`}>
           <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <SeverityIcon s={selectedIssue.severity} />
               <span className="font-medium text-slate-800">{selectedIssue.title}</span>
               <SeverityBadge s={selectedIssue.severity} />
-              <span className="text-xs text-slate-400">{selectedIssue.swcId}</span>
+              {selectedIssue.swcId && <span className="text-xs text-slate-400">{selectedIssue.swcId}</span>}
             </div>
             <span className="text-xs text-slate-500 shrink-0">Ligne {selectedIssue.line}</span>
           </div>
           <p className="mt-1.5 text-slate-600 text-xs leading-relaxed">{selectedIssue.desc}</p>
-        </div>
-      )}
-
-      {contract.issues.length === 0 && (
-        <div className="mt-3 flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          Aucune vulnérabilité détectée — contrat sain.
-        </div>
-      )}
-
-      {/* Issues list */}
-      {contract.issues.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Vulnérabilités détectées</p>
-          {contract.issues.map((issue, i) => (
-            <button
-              key={i}
-              onClick={() => setSelectedIssue(issue === selectedIssue ? null : issue)}
-              className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
-                selectedIssue === issue ? "bg-slate-100 border-slate-300" : "bg-white border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              <SeverityIcon s={issue.severity} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-slate-800">{issue.title}</span>
-                  <SeverityBadge s={issue.severity} />
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5 truncate">{issue.desc}</p>
-              </div>
-              <span className="text-xs text-slate-400 shrink-0">L.{issue.line}</span>
-            </button>
-          ))}
         </div>
       )}
     </div>

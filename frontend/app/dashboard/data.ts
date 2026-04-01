@@ -6,6 +6,7 @@ export interface Issue {
   title: string;
   desc: string;
   swcId: string;
+  tool?: string;
 }
 
 export interface Contract {
@@ -16,4 +17,7 @@ export interface Contract {
   lastAnalyzed: string;
   timeline: { date: string; score: number }[];
   code: string;
+  toolsUsed?: string[];
+  toolsErrors?: Record<string, string>;
+  toolsVersions?: Record<string, string>;
 }

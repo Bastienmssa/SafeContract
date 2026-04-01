@@ -1,0 +1,4 @@
+# Optional security tooling for local analysis workflows
+# Install with: pip install -r backend/requirements-tools.txt
+slither-analyzer
+pyyaml

@@ -106,7 +106,7 @@ export default function FreeAnalysePage() {
             <p className="mt-4 text-base text-slate-600 leading-relaxed">
               Importez un fichier <code className="text-primary-500 font-mono">.sol</code> ou
               collez votre code Solidity. Notre moteur Mythril détecte les
-              vulnérabilités connues.
+              vulnérabilités connues via Mythril, Slither, Solhint et plus.
             </p>
           </div>
 
@@ -208,7 +208,7 @@ export default function FreeAnalysePage() {
             <div className="mt-10">
               <h2 className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-primary-500" />
-                Résultat Mythril
+                Résultat d&apos;analyse
               </h2>
               <pre className="w-full overflow-auto rounded-lg border border-slate-200 bg-slate-950 text-slate-100 px-4 py-4 text-xs font-mono leading-relaxed">
                 {JSON.stringify(result, null, 2)}
