@@ -78,12 +78,22 @@ function reportToContract(report: AggregatedReport, filename: string, code: stri
 
 // ─── DB analysis → Contract mapper ───────────────────────────────────────────
 
+interface DBIssue {
+  line: number | null;
+  severity: string;
+  title: string;
+  description?: string;
+  desc?: string;
+  swcId?: string;
+  tool?: string;
+}
+
 interface RawAnalysis {
   id: string;
   filename: string;
   code: string;
   score: number;
-  issues: Issue[];
+  issues: DBIssue[];
   tools_used: string[];
   tools_errors: Record<string, string>;
   analyzed_at: string;
@@ -102,11 +112,21 @@ function buildContracts(analyses: RawAnalysis[]): Contract[] {
       date: new Date(s.analyzed_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }),
       score: s.score,
     }));
+    const issues: Issue[] = latest.issues.map((i) => ({
+      line: i.line ?? 0,
+      severity: (i.severity === "critical" || i.severity === "medium" || i.severity === "low"
+        ? i.severity : "low") as Severity,
+      title: i.title,
+      desc: i.desc ?? i.description ?? "",
+      swcId: i.swcId ?? "",
+      tool: i.tool,
+    }));
+
     return {
       id: latest.id,
       name: filename,
       score: latest.score,
-      issues: latest.issues,
+      issues,
       lastAnalyzed: latest.analyzed_at.slice(0, 10),
       timeline,
       code: latest.code,
