@@ -15,6 +15,7 @@ def _serialize(doc: dict) -> dict:
         "issues": doc.get("issues", []),
         "tools_used": doc.get("tools_used", []),
         "tools_errors": doc.get("tools_errors", {}),
+        "ai_verdict": doc.get("ai_verdict"),
         "analyzed_at": analyzed_at.isoformat() if hasattr(analyzed_at, "isoformat") else str(analyzed_at),
         "status": doc.get("status", "completed"),
     }

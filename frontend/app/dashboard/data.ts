@@ -7,6 +7,15 @@ export interface Issue {
   desc: string;
   swcId: string;
   tool?: string;
+  confirmedByGnn?: boolean;
+  gnnConfidence?: string;
+  gnnDescription?: string;
+}
+
+export interface AiVerdict {
+  verdict: "vulnerable" | "safe";
+  score: number;
+  explanation: string;
 }
 
 export interface Contract {
@@ -20,4 +29,5 @@ export interface Contract {
   toolsUsed?: string[];
   toolsErrors?: Record<string, string>;
   toolsVersions?: Record<string, string>;
+  aiVerdict?: AiVerdict;
 }

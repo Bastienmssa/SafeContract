@@ -5,3 +5,10 @@ python-multipart
 mythril
 motor
 python-dotenv
+
+# GNN module (modèle IA d'analyse de smart contracts)
+torch>=2.0
+torch-geometric>=2.4
+transformers>=4.30
+slither-analyzer>=0.9.3
+solc-select>=1.0.4

@@ -25,12 +25,9 @@ def _normalize_severity(raw: str) -> str:
 
 # ─── Normalisation d'une issue individuelle ──────────────────────────────────
 
-def _normalize_issue(issue: dict, tool: str) -> dict:
+def normalize_issue(issue: dict, tool: str) -> dict:
     severity_raw = issue.get("severity", "low")
-    if tool == "mythril":
-        severity = _normalize_severity(severity_raw)
-    else:
-        severity = severity_raw
+    severity = _normalize_severity(severity_raw)  # appliqué à tous les outils
 
     return {
         "tool": issue.get("tool", tool),
@@ -46,12 +43,31 @@ def _normalize_issue(issue: dict, tool: str) -> dict:
 
 
 # ─── Calcul du score de sécurité ─────────────────────────────────────────────
+# Convention : 100 = contrat sain, 0 = contrat très vulnérable.
+# Pénalités : critical -30, medium -15, low -5.
 
 def compute_score(issues: list[dict]) -> int:
     criticals = sum(1 for i in issues if i["severity"] == "critical")
-    mediums = sum(1 for i in issues if i["severity"] == "medium")
-    lows = sum(1 for i in issues if i["severity"] == "low")
-    return max(0, min(100, 100 - criticals * 25 - mediums * 10 - lows * 5))
+    mediums   = sum(1 for i in issues if i["severity"] == "medium")
+    lows      = sum(1 for i in issues if i["severity"] == "low")
+    return max(0, min(100, 100 - criticals * 30 - mediums * 15 - lows * 5))
+
+
+def compute_score_weighted(issues: list[dict]) -> int:
+    """
+    Variante de compute_score qui majore les pénalités des issues confirmées
+    par le GNN (×1.5). Appelée par scan.py après la phase IA.
+    """
+    score = 100
+    for i in issues:
+        weight = 1.5 if i.get("confirmedByGnn") else 1.0
+        if i["severity"] == "critical":
+            score -= int(30 * weight)
+        elif i["severity"] == "medium":
+            score -= int(15 * weight)
+        elif i["severity"] == "low":
+            score -= int(5 * weight)
+    return max(0, min(100, score))
 
 
 # ─── Déduplication ───────────────────────────────────────────────────────────
@@ -101,7 +117,7 @@ def aggregate(tool_results: dict[str, Any]) -> dict:
         tools_used.append(tool)
 
         for raw in raw_issues:
-            all_issues.append(_normalize_issue(raw, tool))
+            all_issues.append(normalize_issue(raw, tool))
 
     unique_issues = _deduplicate(all_issues)
 
