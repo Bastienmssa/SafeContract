@@ -1,19 +1,33 @@
-# Backend runtime dependencies (API + scan + MongoDB)
+# Backend runtime dependencies (API + scan + MongoDB + GNN + rapports)
+#
+# ⚠️  NE PAS installer en une seule commande `pip install -r requirements.txt`
+#    Le graph de dépendances est trop complexe (torch + mythril + weasyprint).
+#    Utiliser deploy.sh qui installe par groupes, ou installer groupe par groupe :
+#
+#    pip install fastapi uvicorn python-multipart motor python-dotenv
+#    pip install mythril slither-analyzer solc-select pyyaml
+#    pip install torch torch-geometric transformers
+#    pip install ollama markdown2 weasyprint
+
+# ── Core API ──────────────────────────────────────────────────────────────────
 fastapi
 uvicorn
 python-multipart
-mythril
 motor
 python-dotenv
 
-# GNN module (modèle IA d'analyse de smart contracts)
+# ── Outils d'analyse ─────────────────────────────────────────────────────────
+mythril
+slither-analyzer>=0.9.3
+solc-select>=1.0.4
+pyyaml
+
+# ── GNN (modèle IA SafeContract) ─────────────────────────────────────────────
 torch>=2.0
 torch-geometric>=2.4
 transformers>=4.30
-slither-analyzer>=0.9.3
-solc-select>=1.0.4
 
-# Générateur de rapports d'audit (PDF + Markdown)
+# ── Génération de rapports (PDF + LLM) ───────────────────────────────────────
 ollama
 markdown2
 weasyprint

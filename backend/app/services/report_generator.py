@@ -101,9 +101,9 @@ try:
     import markdown2 as _md2
     from weasyprint import HTML as _WP_HTML
     _PDF_OK = True
-except ImportError:
+except (ImportError, OSError):
     _PDF_OK = False
-    logger.warning("[Rapport] markdown2/weasyprint non installé — PDF désactivé")
+    logger.warning("[Rapport] markdown2/weasyprint non disponible (bibliothèques système manquantes) — PDF désactivé")
 
 # ---------------------------------------------------------------------------
 # Configuration

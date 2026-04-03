@@ -31,35 +31,64 @@ npm run docs         # generate API docs
 ### Backend (FastAPI + Mythril + MongoDB)
 ```bash
 cd backend
-pip install -r requirements.txt
+python3 -m venv .venv && source .venv/bin/activate
+pip install fastapi uvicorn python-multipart motor python-dotenv
+pip install mythril slither-analyzer solc-select pyyaml
+pip install torch torch-geometric transformers
+pip install ollama markdown2 weasyprint
 uvicorn app.main:app --reload    # dev server (port 8000 par défaut)
 ```
 
-L'outil CLI Mythril (`myth`) doit être disponible dans le PATH — invoqué via `subprocess` dans `app/services/mythril_service.py`.
+**Important :** ne pas faire `pip install -r requirements.txt` en une seule fois — le graph de dépendances est trop complexe (torch + mythril + weasyprint). Installer par groupes comme ci-dessus.
 
 MongoDB doit tourner sur `localhost:27017` (configurable via `MONGODB_URL` dans `backend/.env`).
 
-### Security Tools (optional, local)
+### Security Tools (outils d'analyse)
 ```bash
-# Python-based tools
-pip install -r backend/requirements-tools.txt
-
-# Node-based tools
+# Solhint (linter Solidity)
 npm install -g solhint
 
-# Foundry
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
+# Foundry (Mac)
+curl -L https://foundry.paradigm.xyz | bash && foundryup
+ln -s ~/.foundry/bin/forge /opt/homebrew/bin/forge   # rendre visible à Python
 
-# Echidna (Homebrew)
+# Echidna (Mac)
 brew install echidna
+
+# solc (compiler Solidity, nécessaire pour Slither)
+backend/.venv/bin/solc-select install 0.8.20
+backend/.venv/bin/solc-select use 0.8.20
 ```
 
-### Production / PM2
+### Production / PM2 (serveur Linux — /home/SafeContract)
 ```bash
-./deploy.sh                                   # full deploy (install + build + PM2)
-pm2 start ecosystem.config.cjs --env production
-pm2 logs safe-contract-front
+# 1. Libs système (weasyprint)
+sudo apt install -y libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0
+
+# 2. MongoDB
+sudo systemctl start mongod && sudo systemctl enable mongod
+
+# 3. Deploy principal (installe + build + PM2)
+chmod +x deploy.sh && ./deploy.sh
+
+# 4. Symlink Slither + solc
+ln -s /home/SafeContract/backend/.venv/bin/slither /usr/local/bin/slither
+backend/.venv/bin/solc-select install 0.8.20 && backend/.venv/bin/solc-select use 0.8.20
+
+# 5. Echidna (Linux x86_64)
+wget https://github.com/crytic/echidna/releases/download/v2.3.2/echidna-2.3.2-x86_64-linux.tar.gz
+tar -xzf echidna-2.3.2-x86_64-linux.tar.gz && mv echidna /usr/local/bin/ && chmod +x /usr/local/bin/echidna
+
+# 6. Solhint + Foundry
+npm install -g solhint
+curl -L https://foundry.paradigm.xyz | bash && foundryup
+
+# 7. (Optionnel) Rapports LLM
+curl -fsSL https://ollama.com/install.sh | sh && ollama pull mistral
+
+# Logs / redémarrage
+pm2 logs safe-contract-back
+pm2 restart safe-contract-back
 ```
 
 ## Architecture
@@ -88,11 +117,16 @@ Routes defined in `config/routes.oas.json` (OpenAPI 3.1.0). Current routes:
 ### Backend — Pipeline d'analyse (ordre d'exécution dans `scan.py`)
 1. Validation extension (`.sol` ou `.vy`)
 2. Écriture dans `/tmp` (fichier temporaire)
-3. **Parallèle** : Mythril, Slither (+ Solhint, Echidna, Foundry pour `.sol`)
+3. **Parallèle** : Mythril, Slither (+ Solhint, Echidna, Foundry pour `.sol`) — filtrés selon `tools` reçu
 4. `aggregator.py` : `normalize_issue()` → `_deduplicate()` → `compute_score()`
-5. **Séquentiel** : modèle GNN (`app/services/ai_service.py` → `gnn_module/ai_service.py`)
+5. **Séquentiel** : modèle GNN si `"ai"` dans `tools` et `is_available()` — marque les issues `CONFIRMED`, ajoute les `POTENTIAL`, recalcule le score avec `compute_score_weighted()`
 6. Suppression du fichier temporaire
 7. Sauvegarde MongoDB
+
+### Backend — Score de sécurité
+Deux variantes dans `aggregator.py` :
+- `compute_score(issues)` : pénalités `critical -30, medium -15, low -5`
+- `compute_score_weighted(issues)` : idem mais les issues `confirmedByGnn=True` ont un poids ×1.5
 
 ### Backend — Module GNN (`backend/gnn_module/`)
 Modèle Graph Attention Network (GATConv, PyTorch Geometric) entraîné sur des smart contracts Solidity.
@@ -140,12 +174,21 @@ Structure d'un document `analyses` :
   "filename": "MonContrat.sol",
   "code": "// Solidity source...",
   "score": 72,
-  "issues": [{ "line": 14, "severity": "critical", "title": "...", "desc": "...", "swcId": "SWC-107" }],
-  "raw_report": {},
+  "issues": [{
+    "line": 14, "severity": "critical", "title": "...", "description": "...", "swcId": "SWC-107",
+    "tool": "mythril", "confirmedByGnn": true, "gnnConfidence": "0.92", "gnnDescription": "..."
+  }],
+  "summary": { "critical": 1, "medium": 0, "low": 2, "total": 3 },
+  "tools_used": ["mythril", "slither", "ai"],
+  "tools_errors": {},
+  "tools_versions": { "mythril": "0.24.8" },
+  "ai_verdict": { "verdict": "vulnerable", "score": 0.87, "explanation": "..." },
+  "raw_tool_results": {},
   "analyzed_at": "ISODate",
   "status": "completed"
 }
 ```
+**Note :** les issues sont stockées avec le champ `description` (Python). Le frontend mappe `i.desc ?? i.description` pour compatibilité.
 
 ### Frontend — Pages
 - `/` — Landing page (Navbar + sections composables + Footer)
@@ -166,12 +209,21 @@ Structure d'un document `analyses` :
 - `app/dashboard/page.tsx` — Dashboard complet (818+ lignes). Contient : `AnalyseScan`, `HealthGauge`, `SecurityTimeline`, `CodeDiagnostic`, `ContractCard`.
 - `app/dashboard/data.ts` — Types TypeScript (`Contract`, `Issue`, `Severity`). Plus de données mock — les données viennent de MongoDB via `/api/analyses`.
 
-### Frontend — Sélecteur d'outils (dashboard)
-Dans l'onglet "Nouvelle analyse", l'utilisateur choisit les outils via des **checkboxes** :
-- **Mythril** : toujours coché, non décochable (badge "Requis")
-- **Intelligence Artificielle** : optionnelle — badge "Bientôt" tant que `available: false` dans `TOOLS`
-- Pour activer l'IA dans le dashboard : passer `available: true` dans `TOOLS` dans `page.tsx`
-- Le backend accepte déjà `"ai"` dans le paramètre `tools` et appelle le GNN si disponible
+### Frontend — Sélecteur d'analyse (dashboard)
+Dans l'onglet "Nouvelle analyse", l'utilisateur choisit via des **packages** + une checkbox IA :
+- **Analyse Statique** (package) : Slither + Solhint — cochable indépendamment
+- **Analyse Dynamique** (package) : Mythril + Foundry + Echidna — coché par défaut
+- Au moins un package OU l'IA doit rester sélectionné
+- **Intelligence Artificielle** (checkbox séparée) : GNN SafeContract — cochable indépendamment des packages
+- Si l'IA est seule sélectionnée (sans package), le backend appelle uniquement le GNN
+
+Le backend accepte `"ai"` dans le paramètre `tools` et appelle le GNN si `is_available()` == True.
+
+### Frontend — Types (data.ts)
+- `Issue` : `{ line, severity, title, desc, swcId, tool?, confirmedByGnn?, gnnConfidence?, gnnDescription? }`
+- `AiVerdict` : `{ verdict: "vulnerable"|"safe", score: number, explanation: string }`
+- `Contract` : inclut `toolsUsed?`, `toolsErrors?`, `toolsVersions?`, `aiVerdict?`
+- `buildContracts()` mappe les issues DB (`description`) → `Issue.desc` (évite le mismatch de champ)
 
 ### Frontend — Styles
 - Police principale : **Satoshi** (Fontshare CDN, importée dans `globals.css`)

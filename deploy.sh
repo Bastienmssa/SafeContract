@@ -34,7 +34,12 @@ if [ ! -d "$BACKEND_VENV" ]; then
 fi
 
 echo "==> Installing backend dependencies"
-"$BACKEND_VENV/bin/pip" install -r "$BACKEND_DIR/requirements.txt"
+"$BACKEND_VENV/bin/pip" install --upgrade pip
+"$BACKEND_VENV/bin/pip" install fastapi uvicorn python-multipart motor python-dotenv
+"$BACKEND_VENV/bin/pip" install mythril
+"$BACKEND_VENV/bin/pip" install slither-analyzer solc-select pyyaml
+"$BACKEND_VENV/bin/pip" install torch torch-geometric transformers
+"$BACKEND_VENV/bin/pip" install ollama markdown2 weasyprint
 
 if [ ! -x "$BACKEND_VENV/bin/myth" ]; then
   echo "WARNING: myth CLI not found in backend venv. /scan will fail until Mythril installs successfully."
