@@ -24,8 +24,9 @@ import {
   Bot,
   Sparkles,
   Search,
+  FileDown,
 } from "lucide-react";
-import { Contract, Issue, Severity } from "./data";
+import { Contract, Issue, Severity, AiVerdict } from "./data";
 
 // ─── Aggregated report → Contract mapper ─────────────────────────────────────
 
@@ -37,6 +38,9 @@ interface AggregatedIssue {
   line: number | null;
   swcId: string;
   confidence: string;
+  confirmedByGnn?: boolean;
+  gnnConfidence?: string;
+  gnnDescription?: string;
 }
 
 interface AggregatedReport {
@@ -46,9 +50,10 @@ interface AggregatedReport {
   tools_errors: Record<string, string>;
   tools_versions?: Record<string, string>;
   summary: { critical: number; medium: number; low: number; total: number };
+  ai_verdict?: AiVerdict;
 }
 
-function reportToContract(report: AggregatedReport, filename: string, code: string): Contract {
+function reportToContract(report: AggregatedReport, filename: string, code: string, dbId?: string): Contract {
   const issues: Issue[] = report.issues.map((i) => ({
     line: i.line ?? 0,
     severity: (i.severity === "critical" || i.severity === "medium" || i.severity === "low"
@@ -58,12 +63,15 @@ function reportToContract(report: AggregatedReport, filename: string, code: stri
     desc: i.description,
     swcId: i.swcId || "",
     tool: i.tool,
+    confirmedByGnn: i.confirmedByGnn,
+    gnnConfidence:  i.gnnConfidence,
+    gnnDescription: i.gnnDescription,
   }));
 
   const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 
   return {
-    id: String(Date.now()),
+    id: dbId ?? String(Date.now()),
     name: filename,
     score: report.score,
     lastAnalyzed: new Date().toISOString().slice(0, 10),
@@ -73,6 +81,7 @@ function reportToContract(report: AggregatedReport, filename: string, code: stri
     toolsUsed: report.tools_used,
     toolsErrors: report.tools_errors,
     toolsVersions: report.tools_versions,
+    aiVerdict: report.ai_verdict,
   };
 }
 
@@ -98,6 +107,7 @@ interface RawAnalysis {
   tools_errors: Record<string, string>;
   analyzed_at: string;
   status: string;
+  ai_verdict?: AiVerdict;
 }
 
 function buildContracts(analyses: RawAnalysis[]): Contract[] {
@@ -132,6 +142,7 @@ function buildContracts(analyses: RawAnalysis[]): Contract[] {
       code: latest.code,
       toolsUsed: latest.tools_used,
       toolsErrors: latest.tools_errors,
+      aiVerdict: latest.ai_verdict,
     };
   });
 }
@@ -182,6 +193,7 @@ const TOOL_LABELS: Record<string, string> = {
 
 function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
   const [selectedPackages, setSelectedPackages] = useState<Set<PackageId>>(new Set<PackageId>(["dynamique"]));
+  const [aiSelected, setAiSelected] = useState(false);
   const [contractText, setContractText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -189,16 +201,29 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasInput = uploadedFile !== null || contractText.trim().length > 0;
+  // Au moins un outil doit être sélectionné (package ou IA)
+  const hasTools = selectedPackages.size > 0 || aiSelected;
 
   function togglePackage(id: PackageId) {
     setSelectedPackages((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
-        // Ne pas désélectionner si c'est le seul package sélectionné
-        if (next.size === 1) return prev;
+        // Autoriser la désélection seulement si l'IA est cochée OU si un autre package reste
+        if (next.size === 1 && !aiSelected) return prev;
         next.delete(id);
       } else {
         next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleAi() {
+    setAiSelected((prev) => {
+      const next = !prev;
+      // Si on décoche l'IA et qu'aucun package n'est sélectionné, réactiver le dynamique par défaut
+      if (!next && selectedPackages.size === 0) {
+        setSelectedPackages(new Set<PackageId>(["dynamique"]));
       }
       return next;
     });
@@ -208,6 +233,7 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
     const tools: string[] = [];
     if (selectedPackages.has("statique")) tools.push(...STATIC_TOOLS);
     if (selectedPackages.has("dynamique")) tools.push(...DYNAMIC_TOOLS);
+    if (aiSelected) tools.push("ai");
     return tools;
   }
 
@@ -225,7 +251,7 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!hasInput) return;
+    if (!hasInput || !hasTools) return;
     setStatus("loading");
     setErrorMsg("");
 
@@ -248,7 +274,7 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.detail ?? `Erreur HTTP ${res.status}`);
 
-      const contract = reportToContract(json.report ?? json, filename, code);
+      const contract = reportToContract(json.report ?? json, filename, code, json.id ?? undefined);
       setStatus("idle");
       onResult(contract);
     } catch (err: unknown) {
@@ -318,20 +344,41 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
           })}
         </div>
 
-        {/* AI - coming soon */}
+        {/* AI toggle */}
         <button
           type="button"
-          disabled
-          className="mt-3 w-full text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed"
+          onClick={toggleAi}
+          className={`mt-3 w-full text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 transition-all ${
+            aiSelected
+              ? "border-primary-400 bg-primary-50 shadow-sm"
+              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+          }`}
         >
-          <div className="mt-0.5 w-4 h-4 rounded border-2 border-slate-300 bg-white shrink-0" />
+          <div className={`mt-0.5 w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-all ${
+            aiSelected ? "border-primary-500 bg-primary-500" : "border-slate-300 bg-white"
+          }`}>
+            {aiSelected && (
+              <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <Bot className="w-4 h-4 text-slate-400" />
-              <span className="text-sm font-semibold text-slate-500">Intelligence Artificielle</span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase tracking-wide">Bientôt</span>
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+              <Bot className={`w-4 h-4 shrink-0 ${aiSelected ? "text-primary-500" : "text-slate-400"}`} />
+              <span className="text-sm font-semibold text-slate-800">Intelligence Artificielle</span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide">Nouveau</span>
             </div>
-            <p className="text-xs text-slate-400">Modèle IA SafeContract — repasse sur les résultats et détecte des failles supplémentaires.</p>
+            <p className="text-xs text-slate-500 leading-relaxed mb-2">
+              Modèle GNN SafeContract — analyse le graphe CFG et fusionne ses prédictions avec les outils.
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {["GNN v6", "CodeBERT", "PyTorch"].map((t) => (
+                <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${aiSelected ? "bg-primary-100 text-primary-600" : "bg-slate-100 text-slate-500"}`}>
+                  {t}
+                </span>
+              ))}
+            </div>
           </div>
         </button>
       </div>
@@ -390,9 +437,15 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
         <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">{errorMsg}</div>
       )}
 
+      {!hasTools && (
+        <p className="text-xs text-amber-600 text-center">
+          Sélectionnez au moins un type d&apos;analyse.
+        </p>
+      )}
+
       <button
         type="submit"
-        disabled={!hasInput || status === "loading"}
+        disabled={!hasInput || !hasTools || status === "loading"}
         className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors"
       >
         {status === "loading" ? (
@@ -618,10 +671,51 @@ function ToolScoreGrid({ contract }: { contract: Contract }) {
           );
         })}
       </div>
-      {contract.toolsErrors && Object.keys(contract.toolsErrors).length > 0 && (
+      {/* Carte verdict IA */}
+      {contract.aiVerdict && (
+        <div className={`mt-3 px-4 py-3 rounded-lg border flex flex-col gap-2 ${
+          contract.aiVerdict.verdict === "vulnerable"
+            ? "bg-red-50 border-red-200"
+            : "bg-emerald-50 border-emerald-200"
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Bot className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-xs font-semibold text-slate-600">Intelligence Artificielle — GNN v6</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
+                contract.aiVerdict.verdict === "vulnerable"
+                  ? "bg-red-100 text-red-600"
+                  : "bg-emerald-100 text-emerald-600"
+              }`}>
+                {contract.aiVerdict.verdict === "vulnerable" ? "Vulnérable" : "Sain"}
+              </span>
+              {/* Le score GNN mesure la confiance en la vulnérabilité (≠ score de sécurité).
+                  On l'affiche explicitement comme niveau de risque, pas comme note de sécurité. */}
+              {contract.aiVerdict.score > 0 && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                  contract.aiVerdict.score >= 70
+                    ? "bg-red-100 text-red-700"
+                    : contract.aiVerdict.score >= 40
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}>
+                  Risque {contract.aiVerdict.score}%
+                </span>
+              )}
+            </div>
+          </div>
+          {contract.aiVerdict.explanation && (
+            <p className="text-xs text-slate-500 leading-relaxed">{contract.aiVerdict.explanation}</p>
+          )}
+        </div>
+      )}
+
+      {contract.toolsErrors && Object.keys(contract.toolsErrors).filter(k => k !== "ai").length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] font-medium text-slate-400">Non disponibles :</span>
-          {Object.entries(contract.toolsErrors).map(([tool, err]) => (
+          {Object.entries(contract.toolsErrors).filter(([k]) => k !== "ai").map(([tool, err]) => (
             <span key={tool} title={err} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200">
               {TOOL_LABELS[tool] ?? tool}
             </span>
@@ -752,6 +846,18 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-slate-800">{issue.title}</span>
                             <SeverityBadge s={issue.severity} />
+                            {issue.confirmedByGnn && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                <Bot className="w-2.5 h-2.5" />
+                                GNN ✓
+                              </span>
+                            )}
+                            {issue.tool === "ai" && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
+                                <Bot className="w-2.5 h-2.5" />
+                                IA seule
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5 truncate">{issue.desc}</p>
                         </div>
@@ -781,10 +887,28 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
               <span className="font-medium text-slate-800">{selectedIssue.title}</span>
               <SeverityBadge s={selectedIssue.severity} />
               {selectedIssue.swcId && <span className="text-xs text-slate-400">{selectedIssue.swcId}</span>}
+              {selectedIssue.confirmedByGnn && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                  <Bot className="w-2.5 h-2.5" />
+                  Confirmé par le GNN{selectedIssue.gnnConfidence ? ` · ${selectedIssue.gnnConfidence}` : ""}
+                </span>
+              )}
+              {selectedIssue.tool === "ai" && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
+                  <Bot className="w-2.5 h-2.5" />
+                  Détecté par l&apos;IA seule{selectedIssue.gnnConfidence ? ` · ${selectedIssue.gnnConfidence}` : ""}
+                </span>
+              )}
             </div>
             <span className="text-xs text-slate-500 shrink-0">Ligne {selectedIssue.line}</span>
           </div>
           <p className="mt-1.5 text-slate-600 text-xs leading-relaxed">{selectedIssue.desc}</p>
+          {(selectedIssue.confirmedByGnn || selectedIssue.tool === "ai") && selectedIssue.gnnDescription && (
+            <div className="mt-2 pt-2 border-t border-current/10">
+              <p className="text-xs font-semibold text-slate-500 mb-0.5">Analyse GNN</p>
+              <p className="text-xs text-slate-600 leading-relaxed">{selectedIssue.gnnDescription}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -843,6 +967,8 @@ export default function DashboardPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [scanResult, setScanResult] = useState<Contract | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState<"pdf" | "markdown" | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("sc_auth") !== "admin") {
@@ -864,6 +990,33 @@ export default function DashboardPage() {
   function handleLogout() {
     localStorage.removeItem("sc_auth");
     router.push("/");
+  }
+
+  async function downloadReport(format: "pdf" | "markdown") {
+    if (!selectedContract?.id) return;
+    setDownloadingReport(format);
+    setDownloadError(null);
+    try {
+      const res = await fetch(`/api/analyses/${selectedContract.id}/rapport?format=${format}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: `Erreur HTTP ${res.status}` }));
+        throw new Error(body.detail ?? `Erreur ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rapport_${selectedContract.name.replace(".sol", "").replace(".vy", "")}.${format === "pdf" ? "pdf" : "md"}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Révoquer après un délai pour laisser le navigateur démarrer le téléchargement
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setDownloadingReport(null);
+    }
   }
 
   async function handleScanResult(c: Contract) {
@@ -964,6 +1117,40 @@ export default function DashboardPage() {
                   <HealthGauge score={selectedContract.score} />
                   <span className={`text-sm font-semibold ${scoreText}`}>{scoreLabel(selectedContract.score)}</span>
                   <p className="text-xs text-slate-400 text-center">{selectedContract.name}</p>
+                  {/* Boutons rapport */}
+                  {selectedContract.id && (
+                    <div className="flex flex-col gap-1.5 mt-1 w-full">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => downloadReport("pdf")}
+                          disabled={downloadingReport !== null}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors"
+                        >
+                          {downloadingReport === "pdf" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <FileDown className="w-3 h-3" />
+                          )}
+                          PDF
+                        </button>
+                        <button
+                          onClick={() => downloadReport("markdown")}
+                          disabled={downloadingReport !== null}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-100 disabled:cursor-not-allowed rounded-md transition-colors"
+                        >
+                          {downloadingReport === "markdown" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <FileDown className="w-3 h-3" />
+                          )}
+                          Markdown
+                        </button>
+                      </div>
+                      {downloadError && (
+                        <p className="text-xs text-red-500 text-center">{downloadError}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Stats */}

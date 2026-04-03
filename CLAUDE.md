@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 SafeContract is a web3/smart contract analysis platform with four layers:
 - **Frontend**: Next.js 14 (App Router) — site marketing + dashboard d'analyse
 - **API Gateway**: Zuplo (TypeScript, OpenAPI-spec-first) — routes requests to backend or Ethereum RPC
-- **Backend**: Python FastAPI — API d'analyse de contrats via Mythril + persistance MongoDB
+- **Backend**: Python FastAPI — analyse multi-outils (Mythril, Slither, Solhint, Echidna, Foundry) + modèle GNN + persistance MongoDB
 - **Core**: Rust library (stub, not yet implemented)
 
 ## Commands
@@ -81,11 +81,50 @@ Routes defined in `config/routes.oas.json` (OpenAPI 3.1.0). Current routes:
 - `/*` — catch-all proxy to Next.js at `http://159.65.192.47.nip.io:3000`
 
 ### Backend — Endpoints
-- `POST /scan` (`app/api/scan.py`) — reçoit un fichier `.sol`, lance Mythril, calcule le score, **sauvegarde en MongoDB**, retourne `{ status, id, report }`.
+- `POST /scan` (`app/api/scan.py`) — reçoit un fichier `.sol`/`.vy`, lance les outils en parallèle, appelle le GNN, **sauvegarde en MongoDB**, retourne `{ status, id, report }`.
 - `GET /analyses` (`app/api/analyses.py`) — liste toutes les analyses (triées par date desc). Retourne `[]` si MongoDB indisponible.
 - `GET /analyses/{id}` (`app/api/analyses.py`) — récupère une analyse par son ObjectId MongoDB.
 
-`app/services/mythril_service.py` exécute `myth analyze <path> -o json` en subprocess.
+### Backend — Pipeline d'analyse (ordre d'exécution dans `scan.py`)
+1. Validation extension (`.sol` ou `.vy`)
+2. Écriture dans `/tmp` (fichier temporaire)
+3. **Parallèle** : Mythril, Slither (+ Solhint, Echidna, Foundry pour `.sol`)
+4. `aggregator.py` : `normalize_issue()` → `_deduplicate()` → `compute_score()`
+5. **Séquentiel** : modèle GNN (`app/services/ai_service.py` → `gnn_module/ai_service.py`)
+6. Suppression du fichier temporaire
+7. Sauvegarde MongoDB
+
+### Backend — Module GNN (`backend/gnn_module/`)
+Modèle Graph Attention Network (GATConv, PyTorch Geometric) entraîné sur des smart contracts Solidity.
+
+```
+gnn_module/
+├── ai_service.py          ← logique bridge + verdict/score/explanation
+├── gnn_service.py         ← point d'entrée : analyser_contrat(chemin_sol, chemin_rapport)
+├── src/
+│   ├── config.py          ← DIM_TOTALE=786, HEADS=4, SEUIL_DEFAUT=0.60 — NE PAS MODIFIER
+│   ├── live_extractor.py  ← extraction CFG via Slither
+│   ├── live_vectorizer.py ← vectorisation CodeBERT (768 dim) + 18 features expertes
+│   ├── predict.py         ← fusion GNN + outils, niveaux CONFIRMED/POTENTIAL/FILTERED
+│   └── models/
+│       └── gnn_model.py   ← architecture GNN — NE PAS MODIFIER (liée aux poids v6)
+└── models/
+    └── gnn_smart_contracts_v6_retrain.pth   ← poids entraînés — NE PAS MODIFIER
+```
+
+**Fichiers modifiables sans risque :** `gnn_module/ai_service.py`, `gnn_module/src/predict.py`
+**Fichiers figés :** `gnn_module/src/models/gnn_model.py`, `gnn_module/src/config.py`, le `.pth`
+
+**Variable d'environnement :** `GNN_MODULE_PATH` = chemin absolu vers `gnn_module/`. Par défaut résolu relativement à `app/services/ai_service.py`.
+
+**Activation :** `is_available()` retourne `True` automatiquement si le `.pth` existe et si les dépendances sont installées (torch, torch-geometric, transformers).
+
+**Niveaux de findings GNN :**
+- `CONFIRMED` : outil ET GNN d'accord → vulnérabilité certaine
+- `POTENTIAL` : GNN seul, confiance > seuil → remontée dans `ai_issues`
+- `FILTERED` : outil a trouvé mais GNN détecte une protection dans le CFG (CEI, nonReentrant, contrôle d'accès)
+
+**Vulnérabilités détectées :** SWC-107 (Reentrancy), SWC-115 (tx.origin), SWC-122 (Signature Replay), SWC-116 (Timestamp), SWC-120 (Bad Randomness), SWC-101 (Integer Overflow), SWC-113 (DoS), SWC-106 (Selfdestruct), SWC-112 (Delegatecall), SWC-104 (Unchecked Return), Unprotected ETH Withdrawal
 
 ### Backend — MongoDB
 - Connexion dans `app/database/mongodb.py` via `motor` (driver async)
@@ -130,9 +169,9 @@ Structure d'un document `analyses` :
 ### Frontend — Sélecteur d'outils (dashboard)
 Dans l'onglet "Nouvelle analyse", l'utilisateur choisit les outils via des **checkboxes** :
 - **Mythril** : toujours coché, non décochable (badge "Requis")
-- **Intelligence Artificielle** : optionnelle, cochable seulement si aucun autre outil optionnel n'est actif (badge "Bientôt" tant que `available: false`)
-- Règle : cocher un futur outil décoche automatiquement l'IA (badge "Incompatible")
-- Pour activer l'IA quand le modèle sera prêt : passer `available: true` dans `TOOLS` dans `page.tsx` et brancher la logique dans `handleSubmit` selon `selectedTools.has("ai")`
+- **Intelligence Artificielle** : optionnelle — badge "Bientôt" tant que `available: false` dans `TOOLS`
+- Pour activer l'IA dans le dashboard : passer `available: true` dans `TOOLS` dans `page.tsx`
+- Le backend accepte déjà `"ai"` dans le paramètre `tools` et appelle le GNN si disponible
 
 ### Frontend — Styles
 - Police principale : **Satoshi** (Fontshare CDN, importée dans `globals.css`)

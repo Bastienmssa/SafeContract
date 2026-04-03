@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.scan import router as scan_router
 from app.api.analyses import router as analyses_router
+from app.api.reports import router as reports_router
 from app.database.mongodb import connect_db, close_db
 
 app = FastAPI(title="SafeContract API")
@@ -26,3 +27,4 @@ async def shutdown():
 
 app.include_router(scan_router)
 app.include_router(analyses_router)
+app.include_router(reports_router)

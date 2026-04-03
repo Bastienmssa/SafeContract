@@ -7,6 +7,12 @@ node_modules/
 .env
 .env.zuplo
 
-# OS Stuff
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
+# OS Stuff
 .DS_Store
