@@ -2,6 +2,7 @@ import subprocess
 import json
 import shutil
 import os
+import re
 import tempfile
 
 
@@ -63,14 +64,14 @@ def analyze_contract(contract_path: str) -> dict:
                 raw = json.loads(output)
                 for _contract_key, contract_data in raw.get("contracts", {}).items():
                     for warning in contract_data.get("warnings", []):
+                        fmt_msg = warning.get("formattedMessage", warning.get("message", ""))
+                        line_match = re.search(r':(\d+):\d+:', fmt_msg)
+                        lineno = int(line_match.group(1)) if line_match else None
                         issues.append({
                             "title": f"Compiler warning: {warning.get('errorCode', 'unknown')}",
-                            "description": warning.get("formattedMessage", warning.get("message", "")),
+                            "description": fmt_msg,
                             "severity": "low",
-                            "lineno": (
-                                warning.get("sourceLocation", {}).get("start")
-                                if warning.get("sourceLocation") else None
-                            ),
+                            "lineno": lineno,
                             "swc-id": "",
                             "tool": "foundry",
                             "confidence": "high",

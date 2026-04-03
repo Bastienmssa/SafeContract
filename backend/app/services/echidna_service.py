@@ -80,7 +80,7 @@ def analyze_contract(contract_path: str) -> dict:
                     f"Echidna a trouvé un contre-exemple pour {test.get('name')}. "
                     f"Séquence : {json.dumps(test.get('reproducer', []))}"
                 ),
-                "severity": "high",
+                "severity": "medium",
                 "lineno": None,
                 "swc-id": "",
                 "tool": "echidna",

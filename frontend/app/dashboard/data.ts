@@ -24,7 +24,7 @@ export interface Contract {
   score: number;
   issues: Issue[];
   lastAnalyzed: string;
-  timeline: { date: string; score: number }[];
+  timeline: { date: string; rawDate: string; score: number }[];
   code: string;
   toolsUsed?: string[];
   toolsErrors?: Record<string, string>;

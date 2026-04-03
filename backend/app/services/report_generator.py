@@ -248,8 +248,8 @@ def _extraire_infos(analyse: dict) -> dict:
             iss["_swc_correctif"]= ""
             iss["_swc_ref"]      = ""
 
-    summary = rapport.get("summary", {})
-    ai_verdict = rapport.get("ai_verdict", {})
+    summary = rapport.get("summary") or {}
+    ai_verdict = rapport.get("ai_verdict") or {}
 
     return {
         "nom_fichier":    analyse.get("filename", "contrat.sol"),
@@ -259,9 +259,9 @@ def _extraire_infos(analyse: dict) -> dict:
         "nb_medium":      summary.get("medium", 0),
         "nb_low":         summary.get("low", 0),
         "nb_total":       summary.get("total", len(issues)),
-        "outils_utilises":rapport.get("tools_used", []),
-        "outils_versions":rapport.get("tools_versions", {}),
-        "outils_erreurs": rapport.get("tools_errors", {}),
+        "outils_utilises":rapport.get("tools_used") or [],
+        "outils_versions":rapport.get("tools_versions") or {},
+        "outils_erreurs": rapport.get("tools_errors") or {},
         "ai_verdict":     ai_verdict,
         "date":           datetime.datetime.now().strftime("%d/%m/%Y"),
         "heure":          datetime.datetime.now().strftime("%H:%M"),

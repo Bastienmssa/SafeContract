@@ -76,7 +76,7 @@ function reportToContract(report: AggregatedReport, filename: string, code: stri
     score: report.score,
     lastAnalyzed: new Date().toISOString().slice(0, 10),
     issues,
-    timeline: [{ date: today, score: report.score }],
+    timeline: [{ date: today, rawDate: new Date().toISOString(), score: report.score }],
     code,
     toolsUsed: report.tools_used,
     toolsErrors: report.tools_errors,
@@ -95,6 +95,9 @@ interface DBIssue {
   desc?: string;
   swcId?: string;
   tool?: string;
+  confirmedByGnn?: boolean;
+  gnnConfidence?: string;
+  gnnDescription?: string;
 }
 
 interface RawAnalysis {
@@ -105,6 +108,7 @@ interface RawAnalysis {
   issues: DBIssue[];
   tools_used: string[];
   tools_errors: Record<string, string>;
+  tools_versions?: Record<string, string>;
   analyzed_at: string;
   status: string;
   ai_verdict?: AiVerdict;
@@ -117,9 +121,11 @@ function buildContracts(analyses: RawAnalysis[]): Contract[] {
     byFilename[a.filename].push(a);
   }
   return Object.entries(byFilename).map(([filename, scans]) => {
-    const latest = scans[0];
-    const timeline = [...scans].reverse().map((s) => ({
+    const sorted = [...scans].sort((a, b) => new Date(b.analyzed_at).getTime() - new Date(a.analyzed_at).getTime());
+    const latest = sorted[0];
+    const timeline = [...sorted].reverse().map((s) => ({
       date: new Date(s.analyzed_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }),
+      rawDate: s.analyzed_at,
       score: s.score,
     }));
     const issues: Issue[] = latest.issues.map((i) => ({
@@ -130,6 +136,9 @@ function buildContracts(analyses: RawAnalysis[]): Contract[] {
       desc: i.desc ?? i.description ?? "",
       swcId: i.swcId ?? "",
       tool: i.tool,
+      confirmedByGnn: i.confirmedByGnn,
+      gnnConfidence: i.gnnConfidence,
+      gnnDescription: i.gnnDescription,
     }));
 
     return {
@@ -142,9 +151,10 @@ function buildContracts(analyses: RawAnalysis[]): Contract[] {
       code: latest.code,
       toolsUsed: latest.tools_used,
       toolsErrors: latest.tools_errors,
+      toolsVersions: latest.tools_versions,
       aiVerdict: latest.ai_verdict,
     };
-  });
+  }).sort((a, b) => new Date(b.lastAnalyzed).getTime() - new Date(a.lastAnalyzed).getTime());
 }
 
 // ─── Tool packages ────────────────────────────────────────────────────────────
@@ -291,7 +301,11 @@ function AnalyseScan({
     if (!hasInput || !hasTools || isGloballyScanning) return;
     setErrorMsg("");
 
-    const file = uploadedFile ?? new File([contractText], "contract.sol", { type: "text/plain" });
+    const pastedName = (() => {
+      const m = contractText.match(/contract\s+(\w+)/);
+      return m ? `${m[1]}.sol` : "contract.sol";
+    })();
+    const file = uploadedFile ?? new File([contractText], pastedName, { type: "text/plain" });
     const filename = file.name;
     const code = uploadedFile ? await file.text() : contractText;
 
@@ -1019,6 +1033,8 @@ export default function DashboardPage() {
   // true = scan détecté au chargement de la page (pas démarré par l'utilisateur)
   // → active le polling pour détecter la fin du scan
   const [isResumedScan, setIsResumedScan] = useState(false);
+  const [histPage, setHistPage] = useState(1);
+  const HIST_PER_PAGE = 10;
 
   // ── Helper : recharge la liste des contrats depuis la DB ─────────────────
   const refreshContracts = useCallback(async (preferName?: string) => {
@@ -1044,6 +1060,7 @@ export default function DashboardPage() {
   function setActiveSection(s: string) {
     setActiveSectionState(s);
     sessionStorage.setItem("sc_active_section", s);
+    if (s === "analyses") setHistPage(1);
     // Rafraîchir la liste des contrats quand l'utilisateur visite ces onglets
     if (s === "overview" || s === "analyses") {
       refreshContracts();
@@ -1487,49 +1504,80 @@ export default function DashboardPage() {
               </div>
 
               {/* Historique des analyses */}
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Historique des analyses</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100">
-                        <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Contrat</th>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Date</th>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Score</th>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Issues</th>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {contracts.flatMap((c) =>
-                        c.timeline.map((t, i) => ({
-                          contract: c.name,
-                          date: t.date,
-                          score: t.score,
-                          issues: i === c.timeline.length - 1 ? c.issues.length : Math.floor(c.issues.length * (1 + (c.timeline.length - 1 - i) * 0.3)),
-                          key: `${c.id}-${i}`,
-                        }))
-                      ).sort((a, b) => b.date.localeCompare(a.date)).map((row) => (
-                        <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                          <td className="py-2.5 px-3 font-medium text-slate-800">{row.contract}</td>
-                          <td className="py-2.5 px-3 text-slate-500 text-xs">{row.date}</td>
-                          <td className="py-2.5 px-3">
-                            <span className={`font-semibold ${scoreColor(row.score).text}`}>{row.score}/100</span>
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-600">{row.issues}</td>
-                          <td className="py-2.5 px-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              row.score >= 80 ? "bg-emerald-50 text-emerald-600" : row.score >= 50 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
-                            }`}>
-                              {scoreLabel(row.score)}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              {(() => {
+                const allRows = contracts.flatMap((c) =>
+                  c.timeline.map((t, i) => ({
+                    contract: c.name,
+                    date: t.date,
+                    rawDate: t.rawDate,
+                    score: t.score,
+                    issues: i === c.timeline.length - 1 ? c.issues.length : Math.floor(c.issues.length * (1 + (c.timeline.length - 1 - i) * 0.3)),
+                    key: `${c.id}-${i}`,
+                  }))
+                ).sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
+                const totalPages = Math.max(1, Math.ceil(allRows.length / HIST_PER_PAGE));
+                const page = Math.min(histPage, totalPages);
+                const rows = allRows.slice((page - 1) * HIST_PER_PAGE, page * HIST_PER_PAGE);
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Historique des analyses</p>
+                      <p className="text-xs text-slate-400">{allRows.length} analyse{allRows.length !== 1 ? "s" : ""}</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100">
+                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Contrat</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Date</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Score</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Issues</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Statut</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                              <td className="py-2.5 px-3 font-medium text-slate-800">{row.contract}</td>
+                              <td className="py-2.5 px-3 text-slate-500 text-xs">{row.date}</td>
+                              <td className="py-2.5 px-3">
+                                <span className={`font-semibold ${scoreColor(row.score).text}`}>{row.score}/100</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600">{row.issues}</td>
+                              <td className="py-2.5 px-3">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  row.score >= 80 ? "bg-emerald-50 text-emerald-600" : row.score >= 50 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
+                                }`}>
+                                  {scoreLabel(row.score)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+                        <button
+                          onClick={() => setHistPage((p) => Math.max(1, p - 1))}
+                          disabled={page <= 1}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          ← Précédent
+                        </button>
+                        <span className="text-xs text-slate-500">Page {page} / {totalPages}</span>
+                        <button
+                          onClick={() => setHistPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={page >= totalPages}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Suivant →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
