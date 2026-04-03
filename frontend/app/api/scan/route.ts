@@ -16,19 +16,25 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
 
+  // Timeout de 10 min — Mythril + GNN peuvent être lents
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 600_000);
+
   let backendRes: Response;
   try {
     backendRes = await fetch(`${BACKEND_URL}/scan`, {
       method: "POST",
       body: formData,
-      signal: AbortSignal.timeout(600_000), // 10 min — Mythril + GNN peuvent être lents
+      signal: controller.signal,
     });
   } catch (err) {
-    const isTimeout = err instanceof Error && err.name === "TimeoutError";
+    const isTimeout = err instanceof Error && err.name === "AbortError";
     return NextResponse.json(
       { detail: isTimeout ? "L'analyse a dépassé le délai maximal (10 min)." : "Impossible de joindre le backend FastAPI." },
       { status: 502 }
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const text = await backendRes.text();

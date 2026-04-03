@@ -1060,7 +1060,8 @@ export default function DashboardPage() {
     setIsScanning(true);
     setScanningFileName(filename);
     setIsResumedScan(false); // Scan lancé depuis cette session → pas de polling
-  }, []);
+    setScanResult(null); // Effacer le résultat précédent pour éviter qu'il réapparaisse sur erreur
+  }, [setScanResult]);
 
   const handleScanError = useCallback((msg: string) => {
     setToast({ type: "error", msg: `Analyse échouée — ${msg.slice(0, 80)}`, key: Date.now() });

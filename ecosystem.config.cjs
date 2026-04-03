@@ -32,7 +32,7 @@ module.exports = {
       interpreter: "none",
       watch: false,
       autorestart: true,
-      max_memory_restart: "500M",
+      max_memory_restart: "2G",
       env: {
         PYTHONUNBUFFERED: "1",
         PATH: `${__dirname}/backend/.venv/bin:${process.env.PATH}`,

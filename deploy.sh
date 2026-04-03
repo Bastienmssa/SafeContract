@@ -43,11 +43,23 @@ echo "==> Installing backend dependencies (main venv)"
 # Mythril dans un venv isolé pour éviter les conflits eth-* avec Slither
 MYTHRIL_VENV="$BACKEND_DIR/.venv-mythril"
 echo "==> Installing Mythril in isolated venv ($MYTHRIL_VENV)"
-if [ ! -d "$MYTHRIL_VENV" ]; then
-  python3 -m venv "$MYTHRIL_VENV"
+# Mythril requiert Python <=3.13 (pyo3/blake2b-py ne supporte pas Python 3.14+)
+MYTHRIL_PYTHON=""
+for py in python3.13 python3.12; do
+  if command -v "$py" >/dev/null 2>&1; then
+    MYTHRIL_PYTHON="$py"
+    break
+  fi
+done
+if [ -z "$MYTHRIL_PYTHON" ]; then
+  echo "WARNING: Python 3.12/3.13 non trouvé — Mythril pourrait ne pas s'installer correctement avec $(python3 --version)"
+  MYTHRIL_PYTHON="python3"
 fi
-"$MYTHRIL_VENV/bin/pip" install --upgrade pip
-"$MYTHRIL_VENV/bin/pip" install mythril
+if [ ! -d "$MYTHRIL_VENV" ]; then
+  "$MYTHRIL_PYTHON" -m venv "$MYTHRIL_VENV"
+fi
+"$MYTHRIL_VENV/bin/pip" install --upgrade pip "setuptools==68.2.2"
+"$MYTHRIL_VENV/bin/pip" install "coincurve<21" mythril
 
 if [ ! -x "$BACKEND_VENV/bin/myth" ]; then
   echo "WARNING: myth CLI not found in backend venv. /scan will fail until Mythril installs successfully."
