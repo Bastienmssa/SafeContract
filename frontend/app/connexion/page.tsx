@@ -53,7 +53,7 @@ export default function ConnexionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: "#091628" }}>
       {/* Header minimal */}
       <header className="h-16 flex items-center px-6">
         <Link href="/" className="flex items-center shrink-0">
@@ -65,53 +65,43 @@ export default function ConnexionPage() {
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-semibold text-slate-900">Connexion</h1>
-            <p className="mt-2 text-sm text-slate-500">
+            <h1 className="text-2xl font-semibold text-white">Connexion</h1>
+            <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
               Accédez à votre espace SafeContract
             </p>
           </div>
 
           {/* OAuth */}
           <div className="space-y-2.5 mb-6">
-            <button
-              type="button"
-              onClick={() => handleOAuth("GitHub")}
-              className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-md transition-colors"
-            >
-              <GitHubIcon />
-              Continuer avec GitHub
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleOAuth("Google")}
-              className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-md transition-colors"
-            >
-              <GoogleIcon />
-              Continuer avec Google
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleOAuth("SSO")}
-              className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-md transition-colors"
-            >
-              <SSOIcon />
-              Connexion SSO entreprise
-            </button>
+            {[
+              { label: "Continuer avec GitHub", icon: <GitHubIcon />, id: "GitHub" },
+              { label: "Continuer avec Google", icon: <GoogleIcon />, id: "Google" },
+              { label: "Connexion SSO entreprise", icon: <SSOIcon />, id: "SSO" },
+            ].map(({ label, icon, id }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleOAuth(id)}
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90"
+                style={{ background: "linear-gradient(135deg, #2cbe88 0%, #1a6e5a 100%)", border: "1px solid rgba(44,190,136,0.3)" }}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
           </div>
 
           {/* Séparateur */}
           <div className="relative flex items-center mb-6">
-            <div className="flex-1 border-t border-slate-200" />
-            <span className="mx-3 text-xs text-slate-400 uppercase tracking-wide">ou</span>
-            <div className="flex-1 border-t border-slate-200" />
+            <div className="flex-1" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }} />
+            <span className="mx-3 text-xs uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.35)" }}>ou</span>
+            <div className="flex-1" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }} />
           </div>
 
           {/* Formulaire identifiant / mot de passe */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="identifier" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="identifier" className="block text-sm font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.8)" }}>
                 Identifiant
               </label>
               <input
@@ -121,16 +111,17 @@ export default function ConnexionPage() {
                 placeholder="email ou nom d'utilisateur"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm text-slate-800 bg-white border border-slate-200 rounded-md placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent"
+                className="w-full px-3 py-2.5 text-sm text-white rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent"
+                style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", caretColor: "#2cbe88" }}
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="password" className="block text-sm font-medium" style={{ color: "rgba(255,255,255,0.8)" }}>
                   Mot de passe
                 </label>
-                <button type="button" className="text-xs text-primary-500 hover:text-primary-600 transition-colors">
+                <button type="button" className="text-xs text-primary-500 hover:text-primary-400 transition-colors">
                   Mot de passe oublié ?
                 </button>
               </div>
@@ -142,12 +133,14 @@ export default function ConnexionPage() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 pr-10 text-sm text-slate-800 bg-white border border-slate-200 rounded-md placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent"
+                  className="w-full px-3 py-2.5 pr-10 text-sm text-white rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent"
+                  style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", caretColor: "#2cbe88" }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600"
+                  className="absolute inset-y-0 right-3 flex items-center hover:text-white transition-colors"
+                  style={{ color: "rgba(255,255,255,0.4)" }}
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -156,7 +149,7 @@ export default function ConnexionPage() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              <p className="text-sm text-red-400 rounded-md px-3 py-2" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>
                 {error}
               </p>
             )}
@@ -164,15 +157,16 @@ export default function ConnexionPage() {
             <button
               type="submit"
               disabled={!identifier.trim() || !password.trim()}
-              className="w-full py-2.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors border border-primary-500 disabled:border-slate-300"
+              className="w-full py-2.5 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "linear-gradient(135deg, #2cbe88 0%, #1a6e5a 100%)" }}
             >
               Se connecter
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-slate-500">
+          <p className="mt-6 text-center text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
             Pas encore de compte ?{" "}
-            <Link href="/free-analyse" className="text-primary-500 hover:text-primary-600 font-medium transition-colors">
+            <Link href="/free-analyse" className="text-primary-400 hover:text-primary-300 font-medium transition-colors">
               Essai gratuit
             </Link>
           </p>

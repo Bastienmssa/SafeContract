@@ -18,7 +18,7 @@ const STACK = [
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col" style={{ background: "#091628" }}>
       <Navbar />
 
       <main className="flex-1">
@@ -28,12 +28,12 @@ export default function AboutPage() {
           <span className="inline-block text-xs font-semibold tracking-widest uppercase text-primary-500 mb-4">
             À propos
           </span>
-          <h1 className="text-4xl sm:text-5xl font-bold text-slate-900 leading-tight mb-6">
+          <h1 className="text-4xl sm:text-5xl font-bold leading-tight mb-6" style={{ color: "rgba(255,255,255,0.95)" }}>
             La sécurité des smart contracts,{" "}
             <span
               className="inline-block"
               style={{
-                background: "linear-gradient(135deg, #2cbe88 0%, #152d5b 100%)",
+                background: "linear-gradient(135deg, #2cbe88 0%, #7dd8b8 100%)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
@@ -42,7 +42,7 @@ export default function AboutPage() {
               rendue accessible.
             </span>
           </h1>
-          <p className="text-lg text-slate-500 leading-relaxed max-w-2xl mx-auto">
+          <p className="text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(255,255,255,0.55)" }}>
             SafeContract est un projet académique développé à l'ESME Sudria. Notre mission : rendre
             l'audit de contrats Solidity automatique, lisible et accessible à tous les développeurs Web3.
           </p>
@@ -50,13 +50,13 @@ export default function AboutPage() {
 
         {/* Séparateur */}
         <div className="max-w-3xl mx-auto px-6">
-          <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+          <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
         </div>
 
         {/* Contexte */}
         <section className="max-w-3xl mx-auto px-6 py-16">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Le projet</h2>
-          <div className="space-y-4 text-slate-600 leading-relaxed">
+          <h2 className="text-xl font-bold mb-4" style={{ color: "rgba(255,255,255,0.9)" }}>Le projet</h2>
+          <div className="space-y-4 leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>
             <p>
               Les smart contracts gèrent aujourd'hui des milliards de dollars d'actifs sur des blockchains
               publiques. Une seule vulnérabilité — réentrance, dépassement d'entier, contrôle d'accès défaillant —
@@ -64,7 +64,7 @@ export default function AboutPage() {
             </p>
             <p>
               SafeContract automatise l'analyse statique via{" "}
-              <span className="font-semibold text-slate-800">Mythril</span>, un moteur de vérification symbolique
+              <span className="font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>Mythril</span>, un moteur de vérification symbolique
               développé par ConsenSys. Les résultats sont présentés dans une interface claire avec score de sécurité,
               timeline d'évolution, et diagnostic ligne par ligne.
             </p>
@@ -77,20 +77,21 @@ export default function AboutPage() {
 
         {/* Stack */}
         <section className="max-w-3xl mx-auto px-6 pb-16">
-          <h2 className="text-xl font-bold text-slate-900 mb-6">Stack technique</h2>
+          <h2 className="text-xl font-bold mb-6" style={{ color: "rgba(255,255,255,0.9)" }}>Stack technique</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {STACK.map(({ label, value }) => (
               <div
                 key={label}
-                className="flex items-start gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50"
+                className="flex items-start gap-3 p-4 rounded-xl"
+                style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 <div
                   className="mt-0.5 w-2 h-2 rounded-full shrink-0"
                   style={{ background: "linear-gradient(135deg, #2cbe88, #152d5b)" }}
                 />
                 <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-                  <p className="text-sm font-medium text-slate-800">{value}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide mb-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>{label}</p>
+                  <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>{value}</p>
                 </div>
               </div>
             ))}
@@ -99,12 +100,13 @@ export default function AboutPage() {
 
         {/* Équipe */}
         <section className="max-w-3xl mx-auto px-6 pb-16">
-          <h2 className="text-xl font-bold text-slate-900 mb-6">L'équipe</h2>
+          <h2 className="text-xl font-bold mb-6" style={{ color: "rgba(255,255,255,0.9)" }}>L'équipe</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {TEAM.map(({ name, role }) => (
               <div
                 key={name}
-                className="p-5 rounded-xl border border-slate-200 bg-white text-center"
+                className="p-5 rounded-xl text-center"
+                style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 <div
                   className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center text-white font-bold text-lg"
@@ -112,8 +114,8 @@ export default function AboutPage() {
                 >
                   {name[0]}
                 </div>
-                <p className="font-semibold text-slate-900">{name}</p>
-                <p className="text-xs text-slate-500 mt-1">{role}</p>
+                <p className="font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>{name}</p>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.45)" }}>{role}</p>
               </div>
             ))}
           </div>
@@ -121,20 +123,21 @@ export default function AboutPage() {
 
         {/* CTA */}
         <section className="max-w-3xl mx-auto px-6 pb-20 text-center">
-          <div className="p-8 rounded-2xl border border-slate-200 bg-slate-50">
-            <p className="text-lg font-semibold text-slate-800 mb-2">Prêt à auditer votre contrat ?</p>
-            <p className="text-sm text-slate-500 mb-6">Analysez gratuitement — sans compte requis.</p>
+          <div className="p-8 rounded-2xl" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-lg font-semibold mb-2" style={{ color: "rgba(255,255,255,0.9)" }}>Prêt à auditer votre contrat ?</p>
+            <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.45)" }}>Analysez gratuitement — sans compte requis.</p>
             <div className="flex items-center justify-center gap-3 flex-wrap">
               <Link
                 href="/free-analyse"
-                className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:opacity-90 transition-all"
+                className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 transition-all"
                 style={{ background: "linear-gradient(135deg, #2cbe88 0%, #1a6e5a 100%)" }}
               >
                 Essai gratuit
               </Link>
               <Link
                 href="/connexion"
-                className="px-6 py-2.5 rounded-xl text-sm font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-all"
+                className="px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-white/10 transition-all"
+                style={{ color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)" }}
               >
                 Se connecter
               </Link>

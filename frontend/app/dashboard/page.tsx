@@ -211,7 +211,7 @@ function Toast({ data, onDismiss }: { data: ToastData; onDismiss: () => void }) 
 
   return (
     <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm animate-in slide-in-from-bottom-4 fade-in duration-300 ${
-      data.type === "success" ? "bg-white border-emerald-200" : "bg-white border-red-200"
+      data.type === "success" ? "bg-white/5 border-emerald-200" : "bg-white/5 border-red-200"
     }`}>
       {data.type === "success"
         ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
@@ -219,7 +219,7 @@ function Toast({ data, onDismiss }: { data: ToastData; onDismiss: () => void }) 
       <span className={`text-sm font-medium flex-1 ${data.type === "success" ? "text-emerald-800" : "text-red-800"}`}>
         {data.msg}
       </span>
-      <button onClick={onDismiss} className="text-slate-400 hover:text-slate-600 shrink-0 ml-1">
+      <button onClick={onDismiss} className="text-white/40 hover:text-white/60 shrink-0 ml-1">
         <X className="w-4 h-4" />
       </button>
     </div>
@@ -302,7 +302,7 @@ function AnalyseScan({
     setErrorMsg("");
 
     const pastedName = (() => {
-      const m = contractText.match(/contract\s+(\w+)/);
+      const m = contractText.match(/^\s*contract\s+(\w+)/m);
       return m ? `${m[1]}.sol` : "contract.sol";
     })();
     const file = uploadedFile ?? new File([contractText], pastedName, { type: "text/plain" });
@@ -344,7 +344,7 @@ function AnalyseScan({
 
       {/* Package selector */}
       <div>
-        <p className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-3">
+        <p className="flex items-center gap-2 text-sm font-medium text-white/70 mb-3">
           <Sparkles className="w-4 h-4 text-primary-500" />
           Type d&apos;analyse
         </p>
@@ -357,17 +357,18 @@ function AnalyseScan({
                 type="button"
                 disabled={!available || isGloballyScanning}
                 onClick={() => togglePackage(id)}
+                style={checked ? { background: "rgba(44,190,136,0.08)" } : undefined}
                 className={`relative text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 transition-all ${
                   !available
-                    ? "opacity-50 cursor-not-allowed border-slate-200 bg-slate-50"
+                    ? "opacity-50 cursor-not-allowed border-white/10 bg-white/5"
                     : checked
-                    ? "border-primary-400 bg-primary-50 shadow-sm"
-                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    ? "border-primary-500/50"
+                    : "border-white/10 hover:border-white/20 hover:bg-white/5"
                 }`}
               >
                 {/* Checkbox */}
                 <div className={`mt-0.5 w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-all ${
-                  checked ? "border-primary-500 bg-primary-500" : "border-slate-300 bg-white"
+                  checked ? "border-primary-500 bg-primary-500" : "border-white/10 bg-white/5"
                 }`}>
                   {checked && (
                     <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
@@ -378,18 +379,18 @@ function AnalyseScan({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <Icon className={`w-4 h-4 shrink-0 ${checked ? "text-primary-500" : "text-slate-400"}`} />
-                    <span className="text-sm font-semibold text-slate-800">{name}</span>
+                    <Icon className={`w-4 h-4 shrink-0 ${checked ? "text-primary-500" : "text-white/40"}`} />
+                    <span className="text-sm font-semibold text-white">{name}</span>
                     {!available && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase tracking-wide">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/12 text-white/50 uppercase tracking-wide">
                         Bientôt
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-2">{description}</p>
+                  <p className="text-xs text-white/50 leading-relaxed mb-2">{description}</p>
                   <div className="flex flex-wrap gap-1">
                     {tools.map((t) => (
-                      <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${checked ? "bg-primary-100 text-primary-600" : "bg-slate-100 text-slate-500"}`}>
+                      <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${checked ? "text-primary-400" : "text-white/50"}`} style={checked ? { background: "rgba(44,190,136,0.15)" } : { background: "rgba(255,255,255,0.06)" }}>
                         {TOOL_LABELS[t] ?? t}
                       </span>
                     ))}
@@ -406,12 +407,12 @@ function AnalyseScan({
           onClick={toggleAi}
           className={`mt-3 w-full text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 transition-all ${
             aiSelected
-              ? "border-primary-400 bg-primary-50 shadow-sm"
-              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+              ? "border-primary-500/50 shadow-sm"
+              : "border-white/10 hover:border-white/20 hover:bg-white/5"
           }`}
         >
           <div className={`mt-0.5 w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-all ${
-            aiSelected ? "border-primary-500 bg-primary-500" : "border-slate-300 bg-white"
+            aiSelected ? "border-primary-500 bg-primary-500" : "border-white/10 bg-white/5"
           }`}>
             {aiSelected && (
               <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
@@ -421,16 +422,16 @@ function AnalyseScan({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-              <Bot className={`w-4 h-4 shrink-0 ${aiSelected ? "text-primary-500" : "text-slate-400"}`} />
-              <span className="text-sm font-semibold text-slate-800">Intelligence Artificielle</span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide">Nouveau</span>
+              <Bot className={`w-4 h-4 shrink-0 ${aiSelected ? "text-primary-500" : "text-white/40"}`} />
+              <span className="text-sm font-semibold text-white">Intelligence Artificielle</span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide" style={{ background: "rgba(44,190,136,0.15)", color: "#2cbe88" }}>Nouveau</span>
             </div>
-            <p className="text-xs text-slate-500 leading-relaxed mb-2">
+            <p className="text-xs text-white/50 leading-relaxed mb-2">
               Modèle GNN SafeContract — analyse le graphe CFG et fusionne ses prédictions avec les outils.
             </p>
             <div className="flex flex-wrap gap-1">
               {["GNN v6", "CodeBERT", "PyTorch"].map((t) => (
-                <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${aiSelected ? "bg-primary-100 text-primary-600" : "bg-slate-100 text-slate-500"}`}>
+                <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${aiSelected ? "text-primary-400" : "text-white/50"}`} style={aiSelected ? { background: "rgba(44,190,136,0.15)" } : { background: "rgba(255,255,255,0.08)" }}>
                   {t}
                 </span>
               ))}
@@ -441,14 +442,14 @@ function AnalyseScan({
 
       {/* File upload zone */}
       <div>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-white/70 mb-2">
           <Upload className="w-4 h-4 text-primary-500" />
           Importer un fichier .sol
         </label>
         {uploadedFile ? (
-          <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-primary-200 bg-primary-50">
-            <span className="text-sm font-medium text-primary-700 truncate">{uploadedFile.name}</span>
-            <button type="button" onClick={removeFile} className="ml-3 text-slate-400 hover:text-slate-600 shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 rounded-lg" style={{ background: "rgba(44,190,136,0.1)", border: "1px solid rgba(44,190,136,0.25)" }}>
+            <span className="text-sm font-medium text-primary-400 truncate">{uploadedFile.name}</span>
+            <button type="button" onClick={removeFile} className="ml-3 text-white/40 hover:text-white/60 shrink-0">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -456,10 +457,10 @@ function AnalyseScan({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-full flex flex-col items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-slate-200 hover:border-primary-300 hover:bg-slate-50 transition-colors"
+            className="w-full flex flex-col items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-white/10 hover:border-primary-300 hover:bg-white/5 transition-colors"
           >
-            <Upload className="w-5 h-5 text-slate-400" />
-            <span className="text-sm text-slate-500">Cliquer pour sélectionner un fichier <span className="font-medium text-slate-600">.sol</span></span>
+            <Upload className="w-5 h-5 text-white/40" />
+            <span className="text-sm text-white/50">Cliquer pour sélectionner un fichier <span className="font-medium text-white/60">.sol</span></span>
           </button>
         )}
         <input ref={fileInputRef} type="file" accept=".sol" onChange={handleFileChange} className="hidden" />
@@ -468,12 +469,12 @@ function AnalyseScan({
       {!uploadedFile && (
         <>
           <div className="relative flex items-center">
-            <div className="flex-1 border-t border-slate-200" />
-            <span className="mx-3 text-xs text-slate-400 uppercase tracking-wide">ou</span>
-            <div className="flex-1 border-t border-slate-200" />
+            <div className="flex-1 border-t border-white/10" />
+            <span className="mx-3 text-xs text-white/40 uppercase tracking-wide">ou</span>
+            <div className="flex-1 border-t border-white/10" />
           </div>
           <div>
-            <label htmlFor="scan-code" className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="scan-code" className="flex items-center gap-2 text-sm font-medium text-white/70 mb-2">
               <FileCode2 className="w-4 h-4 text-primary-500" />
               Coller le code Solidity
             </label>
@@ -483,18 +484,19 @@ function AnalyseScan({
               onChange={(e) => setContractText(e.target.value)}
               rows={12}
               placeholder={"// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract MonContrat {\n    // ...\n}"}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent resize-y"
+              className="w-full rounded-lg px-4 py-3 font-mono text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent resize-y"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", caretColor: "#2cbe88" }}
             />
           </div>
         </>
       )}
 
       {errorMsg && !isGloballyScanning && (
-        <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">{errorMsg}</div>
+        <div className="p-3 rounded-lg text-sm text-red-400" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>{errorMsg}</div>
       )}
 
       {!hasTools && !isGloballyScanning && (
-        <p className="text-xs text-amber-600 text-center">
+        <p className="text-xs text-amber-400 text-center">
           Sélectionnez au moins un type d&apos;analyse.
         </p>
       )}
@@ -502,7 +504,7 @@ function AnalyseScan({
       <button
         type="submit"
         disabled={!hasInput || !hasTools || isGloballyScanning}
-        className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors"
+        className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:opacity-30 disabled:cursor-not-allowed rounded-md transition-colors"
       >
         {isGloballyScanning ? (
           <><Loader2 className="w-4 h-4 animate-spin" />Analyse en cours…</>
@@ -536,14 +538,14 @@ function computeToolScore(issues: Issue[]): number {
 }
 
 function SeverityBadge({ s }: { s: Severity }) {
-  const map = {
-    critical: "bg-red-100 text-red-700 border-red-200",
-    medium: "bg-amber-100 text-amber-700 border-amber-200",
-    low: "bg-blue-100 text-blue-700 border-blue-200",
+  const styleMap: Record<Severity, React.CSSProperties> = {
+    critical: { background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" },
+    medium: { background: "rgba(245,158,11,0.15)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.3)" },
+    low: { background: "rgba(59,130,246,0.15)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.3)" },
   };
   const labels = { critical: "Critique", medium: "Moyen", low: "Faible" };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${map[s]}`}>
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={styleMap[s]}>
       {labels[s]}
     </span>
   );
@@ -577,7 +579,7 @@ function HealthGauge({ score }: { score: number }) {
       </svg>
       <div className="text-center">
         <span className={`text-3xl font-bold ${text}`}>{score}</span>
-        <span className="block text-xs text-slate-400 mt-0.5">/ 100</span>
+        <span className="block text-xs text-white/40 mt-0.5">/ 100</span>
       </div>
     </div>
   );
@@ -607,7 +609,7 @@ function SecurityTimeline({ timeline }: { timeline: { date: string; score: numbe
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">Évolution du score de sécurité</h3>
+        <h3 className="text-sm font-semibold text-white/70">Évolution du score de sécurité</h3>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${delta >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"}`}>
           {delta >= 0 ? "+" : ""}{delta} pts depuis le début
         </span>
@@ -645,7 +647,7 @@ function SecurityTimeline({ timeline }: { timeline: { date: string; score: numbe
           </g>
         ))}
       </svg>
-      <p className="mt-2 text-xs text-slate-500 text-center">
+      <p className="mt-2 text-xs text-white/50 text-center">
         Score passé de <strong>{first}/100</strong> à <strong>{last}/100</strong> en {timeline.length - 1} analyse{timeline.length > 2 ? "s" : ""}
       </p>
     </div>
@@ -690,24 +692,24 @@ function ToolScoreGrid({ contract }: { contract: Contract }) {
   ].filter(Boolean) as { id: string; label: string; score: number; tools: string[]; issues: Issue[]; icon: React.ElementType }[];
 
   return (
-    <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="mb-5 rounded-xl p-4" style={{ background: "#0a1e38", border: "1px solid rgba(255,255,255,0.08)" }}>
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Scores par type d&apos;analyse</p>
-        <span className="text-xs text-slate-400">Score global : <span className={`font-bold ${scoreColor(contract.score).text}`}>{contract.score}/100</span></span>
+        <p className="text-xs font-semibold text-white/50 uppercase tracking-wide">Scores par type d&apos;analyse</p>
+        <span className="text-xs text-white/40">Score global : <span className={`font-bold ${scoreColor(contract.score).text}`}>{contract.score}/100</span></span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {packages.map(({ id, label, score, tools: pkgTools, issues: pkgIssues, icon: Icon }) => {
           const { text, ring } = scoreColor(score);
           return (
-            <div key={id} className="flex flex-col gap-2 px-4 py-3 rounded-lg bg-white border border-slate-200">
+            <div key={id} className="flex flex-col gap-2 px-4 py-3 rounded-lg bg-white/5 border border-white/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Icon className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-xs font-semibold text-slate-600">{label}</span>
+                  <Icon className="w-3.5 h-3.5 text-white/40" />
+                  <span className="text-xs font-semibold text-white/60">{label}</span>
                 </div>
                 <span className={`text-xl font-bold ${text}`}>{score}</span>
               </div>
-              <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+              <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.15)" }}>
                 <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: ring }} />
               </div>
               <div className="flex items-center justify-between">
@@ -715,13 +717,13 @@ function ToolScoreGrid({ contract }: { contract: Contract }) {
                   {pkgTools.map((t) => {
                     const version = contract.toolsVersions?.[t];
                     return (
-                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-medium" title={version ? `v${version}` : undefined}>
-                        {TOOL_LABELS[t] ?? t}{version ? <span className="text-slate-400 font-normal"> v{version}</span> : null}
+                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-white/8 text-white/50 font-medium" title={version ? `v${version}` : undefined}>
+                        {TOOL_LABELS[t] ?? t}{version ? <span className="text-white/40 font-normal"> v{version}</span> : null}
                       </span>
                     );
                   })}
                 </div>
-                <span className="text-[10px] text-slate-400">{pkgIssues.length} issue{pkgIssues.length !== 1 ? "s" : ""}</span>
+                <span className="text-[10px] text-white/40">{pkgIssues.length} issue{pkgIssues.length !== 1 ? "s" : ""}</span>
               </div>
             </div>
           );
@@ -729,50 +731,59 @@ function ToolScoreGrid({ contract }: { contract: Contract }) {
       </div>
       {/* Carte verdict IA */}
       {contract.aiVerdict && (
-        <div className={`mt-3 px-4 py-3 rounded-lg border flex flex-col gap-2 ${
-          contract.aiVerdict.verdict === "vulnerable"
-            ? "bg-red-50 border-red-200"
-            : "bg-emerald-50 border-emerald-200"
-        }`}>
+        <div
+          className="mt-3 px-4 py-3 rounded-lg flex flex-col gap-2"
+          style={
+            contract.aiVerdict.verdict === "vulnerable"
+              ? { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }
+              : { background: "rgba(44,190,136,0.08)", border: "1px solid rgba(44,190,136,0.25)" }
+          }
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <Bot className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-xs font-semibold text-slate-600">Intelligence Artificielle — GNN v6</span>
+              <Bot className="w-3.5 h-3.5 text-white/50" />
+              <span className="text-xs font-semibold text-white/60">Intelligence Artificielle — GNN v6</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
-                contract.aiVerdict.verdict === "vulnerable"
-                  ? "bg-red-100 text-red-600"
-                  : "bg-emerald-100 text-emerald-600"
-              }`}>
+              <span
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
+                style={
+                  contract.aiVerdict.verdict === "vulnerable"
+                    ? { background: "rgba(239,68,68,0.2)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }
+                    : { background: "rgba(44,190,136,0.2)", color: "#2cbe88", border: "1px solid rgba(44,190,136,0.3)" }
+                }
+              >
                 {contract.aiVerdict.verdict === "vulnerable" ? "Vulnérable" : "Sain"}
               </span>
               {/* Le score GNN mesure la confiance en la vulnérabilité (≠ score de sécurité).
                   On l'affiche explicitement comme niveau de risque, pas comme note de sécurité. */}
               {contract.aiVerdict.score > 0 && (
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                  contract.aiVerdict.score >= 70
-                    ? "bg-red-100 text-red-700"
-                    : contract.aiVerdict.score >= 40
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-slate-100 text-slate-500"
-                }`}>
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded"
+                  style={
+                    contract.aiVerdict.score >= 70
+                      ? { background: "rgba(239,68,68,0.15)", color: "#f87171" }
+                      : contract.aiVerdict.score >= 40
+                      ? { background: "rgba(245,158,11,0.15)", color: "#fbbf24" }
+                      : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }
+                  }
+                >
                   Risque {contract.aiVerdict.score}%
                 </span>
               )}
             </div>
           </div>
           {contract.aiVerdict.explanation && (
-            <p className="text-xs text-slate-500 leading-relaxed">{contract.aiVerdict.explanation}</p>
+            <p className="text-xs text-white/50 leading-relaxed">{contract.aiVerdict.explanation}</p>
           )}
         </div>
       )}
 
       {contract.toolsErrors && Object.keys(contract.toolsErrors).filter(k => k !== "ai").length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] font-medium text-slate-400">Non disponibles :</span>
+          <span className="text-[10px] font-medium text-white/40">Non disponibles :</span>
           {Object.entries(contract.toolsErrors).filter(([k]) => k !== "ai").map(([tool, err]) => (
-            <span key={tool} title={err} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200">
+            <span key={tool} title={err} className="text-[10px] px-2 py-0.5 rounded-full bg-white/8 text-white/40 border border-white/10">
               {TOOL_LABELS[tool] ?? tool}
             </span>
           ))}
@@ -796,14 +807,14 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-slate-700 mb-3">Code & Diagnostic</h3>
+      <h3 className="text-sm font-semibold text-white/70 mb-3">Code & Diagnostic</h3>
       <ToolScoreGrid contract={contract} />
       <div className="flex gap-3">
         {/* Code panel */}
-        <div className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-950 overflow-hidden">
+        <div className="flex-1 min-w-0 rounded-lg border border-white/10 bg-slate-950 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-800 bg-slate-900">
-            <FileCode2 className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs text-slate-400 font-mono">{contract.name}</span>
+            <FileCode2 className="w-3.5 h-3.5 text-white/40" />
+            <span className="text-xs text-white/40 font-mono">{contract.name}</span>
           </div>
           <div className="overflow-auto max-h-80">
             <table className="w-full text-xs font-mono">
@@ -818,7 +829,7 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
                       className={`group cursor-default ${bg} ${issue ? "cursor-pointer" : ""}`}
                       onClick={() => issue && setSelectedIssue(issue === selectedIssue ? null : issue)}
                     >
-                      <td className="select-none w-10 px-3 py-0.5 text-slate-600 text-right border-r border-slate-800">
+                      <td className="select-none w-10 px-3 py-0.5 text-white/60 text-right border-r border-slate-800">
                         {lineNo}
                       </td>
                       <td className="px-3 py-0.5 text-slate-200 whitespace-pre">
@@ -838,7 +849,7 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
         </div>
 
         {/* Heatmap minimap */}
-        <div className="w-5 rounded border border-slate-200 bg-slate-100 relative overflow-hidden shrink-0" style={{ height: 320 }}>
+        <div className="w-5 rounded border border-white/10 bg-white/8 relative overflow-hidden shrink-0" style={{ height: 320 }}>
           {contract.issues.map((issue, i) => {
             const topPct = (issue.line / totalLines) * 100;
             const color = issue.severity === "critical" ? "#ef4444" : issue.severity === "medium" ? "#f59e0b" : "#3b82f6";
@@ -855,7 +866,7 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
       </div>
 
       {contract.issues.length === 0 && (
-        <div className="mt-3 flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+        <div className="mt-3 flex items-center gap-2 text-sm text-primary-400 rounded-lg px-4 py-3" style={{ background: "rgba(44,190,136,0.08)", border: "1px solid rgba(44,190,136,0.2)" }}>
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           Aucune vulnérabilité détectée — contrat sain.
         </div>
@@ -866,7 +877,7 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
         const toolOrder = Array.from(new Set(contract.issues.map((i) => i.tool ?? "unknown")));
         return (
           <div className="mt-4 space-y-4">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Vulnérabilités par outil</p>
+            <p className="text-xs font-medium text-white/50 uppercase tracking-wide">Vulnérabilités par outil</p>
             {toolOrder.map((tool) => {
               const toolIssues = contract.issues.filter((i) => (i.tool ?? "unknown") === tool);
               const toolScore = computeToolScore(toolIssues);
@@ -875,51 +886,127 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
                 <div key={tool}>
                   {/* Tool header */}
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="h-px flex-1 bg-slate-100" />
+                    <div className="h-px flex-1 bg-white/8" />
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs font-semibold text-slate-500">
+                      <span className="text-xs font-semibold text-white/50">
                         {TOOL_LABELS[tool] ?? tool}
                       </span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-white/40">
                         {toolIssues.length} issue{toolIssues.length !== 1 ? "s" : ""}
                       </span>
                       <span className={`text-xs font-bold ${text}`}>{toolScore}/100</span>
                     </div>
-                    <div className="h-px flex-1 bg-slate-100" />
+                    <div className="h-px flex-1 bg-white/8" />
                   </div>
                   {/* Tool issues */}
                   <div className="space-y-1.5">
-                    {toolIssues.map((issue, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setSelectedIssue(issue === selectedIssue ? null : issue)}
-                        className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
-                          selectedIssue === issue ? "bg-slate-100 border-slate-300" : "bg-white border-slate-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        <SeverityIcon s={issue.severity} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-slate-800">{issue.title}</span>
-                            <SeverityBadge s={issue.severity} />
-                            {issue.confirmedByGnn && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                <Bot className="w-2.5 h-2.5" />
-                                GNN ✓
-                              </span>
-                            )}
-                            {issue.tool === "ai" && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
-                                <Bot className="w-2.5 h-2.5" />
-                                IA seule
-                              </span>
-                            )}
+                    {toolIssues.map((issue, i) => {
+                      const isOpen = selectedIssue === issue;
+                      const detailBorder = issue.severity === "critical"
+                        ? "rgba(239,68,68,0.3)"
+                        : issue.severity === "medium"
+                        ? "rgba(245,158,11,0.3)"
+                        : "rgba(59,130,246,0.3)";
+                      const detailBg = issue.severity === "critical"
+                        ? "rgba(239,68,68,0.07)"
+                        : issue.severity === "medium"
+                        ? "rgba(245,158,11,0.07)"
+                        : "rgba(59,130,246,0.07)";
+                      return (
+                        <div key={i} className="relative">
+                          {/* Issue row — sits above the detail panel (z-index) */}
+                          <button
+                            onClick={() => setSelectedIssue(isOpen ? null : issue)}
+                            style={{ position: "relative", zIndex: 1 }}
+                            className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                              isOpen
+                                ? "border-white/20 rounded-b-none"
+                                : "border-white/10 hover:border-white/20 hover:bg-white/5"
+                            }`}
+                            aria-expanded={isOpen}
+                          >
+                            <SeverityIcon s={issue.severity} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-white">{issue.title}</span>
+                                <SeverityBadge s={issue.severity} />
+                                {issue.confirmedByGnn && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(44,190,136,0.15)", color: "#2cbe88", border: "1px solid rgba(44,190,136,0.3)" }}>
+                                    <Bot className="w-2.5 h-2.5" />
+                                    GNN ✓
+                                  </span>
+                                )}
+                                {issue.tool === "ai" && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}>
+                                    <Bot className="w-2.5 h-2.5" />
+                                    IA seule
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-white/50 mt-0.5 truncate">{issue.desc}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs text-white/40">L.{issue.line}</span>
+                              <svg
+                                className="w-3.5 h-3.5 text-white/40 transition-transform duration-200"
+                                style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                              >
+                                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </div>
+                          </button>
+
+                          {/* Detail panel — slides from behind the issue row */}
+                          <div
+                            style={{
+                              maxHeight: isOpen ? "400px" : "0px",
+                              opacity: isOpen ? 1 : 0,
+                              overflow: "hidden",
+                              transition: "max-height 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease",
+                              background: detailBg,
+                              border: `1px solid ${detailBorder}`,
+                              borderTop: "none",
+                              borderRadius: "0 0 8px 8px",
+                              position: "relative",
+                              zIndex: 0,
+                            }}
+                          >
+                            <div className="px-4 py-3 space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {issue.swcId && (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded text-white/50" style={{ background: "rgba(255,255,255,0.08)" }}>
+                                      {issue.swcId}
+                                    </span>
+                                  )}
+                                  {issue.confirmedByGnn && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(44,190,136,0.15)", color: "#2cbe88", border: "1px solid rgba(44,190,136,0.3)" }}>
+                                      <Bot className="w-2.5 h-2.5" />
+                                      Confirmé GNN{issue.gnnConfidence ? ` · ${issue.gnnConfidence}` : ""}
+                                    </span>
+                                  )}
+                                  {issue.tool === "ai" && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}>
+                                      <Bot className="w-2.5 h-2.5" />
+                                      Détecté par l&apos;IA seule{issue.gnnConfidence ? ` · ${issue.gnnConfidence}` : ""}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xs text-white/40 shrink-0">Ligne {issue.line}</span>
+                              </div>
+                              <p className="text-xs text-white/70 leading-relaxed">{issue.desc}</p>
+                              {(issue.confirmedByGnn || issue.tool === "ai") && issue.gnnDescription && (
+                                <div className="pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                                  <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1">Analyse GNN</p>
+                                  <p className="text-xs text-white/60 leading-relaxed">{issue.gnnDescription}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5 truncate">{issue.desc}</p>
                         </div>
-                        <span className="text-xs text-slate-400 shrink-0">L.{issue.line}</span>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -927,46 +1014,6 @@ function CodeDiagnostic({ contract }: { contract: Contract }) {
           </div>
         );
       })()}
-
-      {/* Issue detail panel */}
-      {selectedIssue && (
-        <div className={`mt-3 p-4 rounded-lg border text-sm ${
-          selectedIssue.severity === "critical"
-            ? "bg-red-50 border-red-200"
-            : selectedIssue.severity === "medium"
-            ? "bg-amber-50 border-amber-200"
-            : "bg-blue-50 border-blue-200"
-        }`}>
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SeverityIcon s={selectedIssue.severity} />
-              <span className="font-medium text-slate-800">{selectedIssue.title}</span>
-              <SeverityBadge s={selectedIssue.severity} />
-              {selectedIssue.swcId && <span className="text-xs text-slate-400">{selectedIssue.swcId}</span>}
-              {selectedIssue.confirmedByGnn && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                  <Bot className="w-2.5 h-2.5" />
-                  Confirmé par le GNN{selectedIssue.gnnConfidence ? ` · ${selectedIssue.gnnConfidence}` : ""}
-                </span>
-              )}
-              {selectedIssue.tool === "ai" && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
-                  <Bot className="w-2.5 h-2.5" />
-                  Détecté par l&apos;IA seule{selectedIssue.gnnConfidence ? ` · ${selectedIssue.gnnConfidence}` : ""}
-                </span>
-              )}
-            </div>
-            <span className="text-xs text-slate-500 shrink-0">Ligne {selectedIssue.line}</span>
-          </div>
-          <p className="mt-1.5 text-slate-600 text-xs leading-relaxed">{selectedIssue.desc}</p>
-          {(selectedIssue.confirmedByGnn || selectedIssue.tool === "ai") && selectedIssue.gnnDescription && (
-            <div className="mt-2 pt-2 border-t border-current/10">
-              <p className="text-xs font-semibold text-slate-500 mb-0.5">Analyse GNN</p>
-              <p className="text-xs text-slate-600 leading-relaxed">{selectedIssue.gnnDescription}</p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -988,20 +1035,21 @@ function ContractCard({
   return (
     <button
       onClick={onClick}
+      style={selected ? { background: "rgba(44,190,136,0.08)" } : undefined}
       className={`w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl border transition-all ${
         selected
-          ? "bg-primary-50 border-primary-300 ring-1 ring-primary-300/30"
-          : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+          ? "border-primary-500/40"
+          : "border-white/10 hover:border-white/20 hover:bg-white/5"
       }`}
     >
       <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${bg} bg-opacity-15`}>
         <span className={`text-sm font-bold ${text}`}>{contract.score}</span>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate">{contract.name}</p>
-        <p className="text-xs text-slate-500">{contract.issues.length} issue{contract.issues.length !== 1 ? "s" : ""}{criticals > 0 ? ` · ${criticals} critique${criticals > 1 ? "s" : ""}` : ""}</p>
+        <p className="text-sm font-medium text-white truncate">{contract.name}</p>
+        <p className="text-xs text-white/50">{contract.issues.length} issue{contract.issues.length !== 1 ? "s" : ""}{criticals > 0 ? ` · ${criticals} critique${criticals > 1 ? "s" : ""}` : ""}</p>
       </div>
-      <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+      <ChevronRight className="w-4 h-4 text-white/40 shrink-0" />
     </button>
   );
 }
@@ -1181,6 +1229,8 @@ export default function DashboardPage() {
     setScanResult(c);
     setToast({ type: "success", msg: `Analyse terminée — ${c.name}`, key: Date.now() });
     await refreshContracts(c.name);
+    setSelectedContract(c);
+    setActiveSection("diagnostic");
   }
 
   const { text: scoreText } = scoreColor(selectedContract?.score ?? 0);
@@ -1188,10 +1238,10 @@ export default function DashboardPage() {
   const mediums = selectedContract?.issues.filter((i) => i.severity === "medium").length ?? 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen flex" style={{ background: "#091628" }}>
       {/* Sidebar */}
-      <aside className="w-56 shrink-0 bg-white border-r border-slate-200 flex flex-col">
-        <div className="h-16 flex items-center px-4 border-b border-slate-200">
+      <aside className="w-56 shrink-0 flex flex-col" style={{ background: "#0d1e35", borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="h-16 flex items-center px-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <Link href="/" className="flex items-center gap-2">
             <img src="/images/SafeContract-Logo.png" alt="SafeContract" className="h-7 w-auto" />
             <span
@@ -1210,8 +1260,8 @@ export default function DashboardPage() {
               onClick={() => setActiveSection(id)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeSection === id
-                  ? "bg-primary-50 text-primary-600"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  ? "bg-primary-500/20 text-primary-400"
+                  : "text-white/50 hover:bg-white/5 hover:text-white"
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -1223,10 +1273,10 @@ export default function DashboardPage() {
           ))}
         </nav>
 
-        <div className="px-3 py-4 border-t border-slate-200">
+        <div className="px-3 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-white/50 hover:bg-white/5 hover:text-white transition-colors"
           >
             <LogOut className="w-4 h-4 shrink-0" />
             Déconnexion
@@ -1237,8 +1287,8 @@ export default function DashboardPage() {
       {/* Main */}
       <main className="flex-1 min-w-0 flex flex-col">
         {/* Top bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-          <h1 className="text-base font-semibold text-slate-900">
+        <header className="h-16 flex items-center justify-between px-6 shrink-0" style={{ background: "#0d1e35", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+          <h1 className="text-base font-semibold text-white">
             {NAV.find((n) => n.id === activeSection)?.label}
           </h1>
           <div className="flex items-center gap-3">
@@ -1253,7 +1303,7 @@ export default function DashboardPage() {
             )}
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold">A</div>
-              <span className="text-sm font-medium text-slate-700">admin</span>
+              <span className="text-sm font-medium text-white/70">admin</span>
             </div>
           </div>
         </header>
@@ -1263,8 +1313,8 @@ export default function DashboardPage() {
           {/* ── Vue d'ensemble ───────────────────────────────────────────── */}
           {activeSection === "overview" && !selectedContract && (
             <div className="max-w-5xl mx-auto flex flex-col items-center justify-center gap-4 py-20 text-center">
-              <ShieldAlert className="w-12 h-12 text-slate-300" />
-              <p className="text-slate-500 text-sm">Aucune analyse dans la base de données.<br />Rendez-vous dans <strong>Nouvelle analyse</strong> pour scanner votre premier contrat.</p>
+              <ShieldAlert className="w-12 h-12 text-white/30" />
+              <p className="text-white/50 text-sm">Aucune analyse dans la base de données.<br />Rendez-vous dans <strong>Nouvelle analyse</strong> pour scanner votre premier contrat.</p>
             </div>
           )}
           {activeSection === "overview" && selectedContract && (
@@ -1273,11 +1323,11 @@ export default function DashboardPage() {
               {/* Health Score + stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Big health card */}
-                <div className="md:col-span-1 bg-white rounded-xl border border-slate-200 p-6 flex flex-col items-center gap-3">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Health Score</p>
+                <div className="md:col-span-1 rounded-xl p-6 flex flex-col items-center gap-3" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <p className="text-xs font-semibold text-white/50 uppercase tracking-wide">Health Score</p>
                   <HealthGauge score={selectedContract.score} />
                   <span className={`text-sm font-semibold ${scoreText}`}>{scoreLabel(selectedContract.score)}</span>
-                  <p className="text-xs text-slate-400 text-center">{selectedContract.name}</p>
+                  <p className="text-xs text-white/40 text-center">{selectedContract.name}</p>
                   {/* Boutons rapport */}
                   {selectedContract.id && (
                     <div className="flex flex-col gap-1.5 mt-1 w-full">
@@ -1299,7 +1349,7 @@ export default function DashboardPage() {
                           onClick={() => downloadReport("markdown")}
                           disabled={downloadingReport !== null || isScanning}
                           title={isScanning ? "Analyse en cours, veuillez patienter" : undefined}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-100 disabled:cursor-not-allowed rounded-md transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/70 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition-colors" style={{ background: "rgba(255,255,255,0.08)" }}
                         >
                           {downloadingReport === "markdown" ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
@@ -1318,37 +1368,37 @@ export default function DashboardPage() {
 
                 {/* Stats */}
                 <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-1">
+                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                     <ShieldX className="w-5 h-5 text-red-500 mb-1" />
-                    <span className="text-2xl font-bold text-slate-900">{criticals}</span>
-                    <span className="text-xs text-slate-500">Vulnérabilité{criticals !== 1 ? "s" : ""} critique{criticals !== 1 ? "s" : ""}</span>
+                    <span className="text-2xl font-bold text-white">{criticals}</span>
+                    <span className="text-xs text-white/50">Vulnérabilité{criticals !== 1 ? "s" : ""} critique{criticals !== 1 ? "s" : ""}</span>
                   </div>
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-1">
+                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                     <AlertTriangle className="w-5 h-5 text-amber-500 mb-1" />
-                    <span className="text-2xl font-bold text-slate-900">{mediums}</span>
-                    <span className="text-xs text-slate-500">Risque{mediums !== 1 ? "s" : ""} modéré{mediums !== 1 ? "s" : ""}</span>
+                    <span className="text-2xl font-bold text-white">{mediums}</span>
+                    <span className="text-xs text-white/50">Risque{mediums !== 1 ? "s" : ""} modéré{mediums !== 1 ? "s" : ""}</span>
                   </div>
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-1">
+                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                     <AlertCircle className="w-5 h-5 text-blue-500 mb-1" />
-                    <span className="text-2xl font-bold text-slate-900">{selectedContract.issues.length}</span>
-                    <span className="text-xs text-slate-500">Issues totales</span>
+                    <span className="text-2xl font-bold text-white">{selectedContract.issues.length}</span>
+                    <span className="text-xs text-white/50">Issues totales</span>
                   </div>
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-1">
+                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                     <ShieldCheck className="w-5 h-5 text-emerald-500 mb-1" />
-                    <span className="text-2xl font-bold text-slate-900">{contracts.filter((c) => c.score >= 80).length}</span>
-                    <span className="text-xs text-slate-500">Contrats sains</span>
+                    <span className="text-2xl font-bold text-white">{contracts.filter((c) => c.score >= 80).length}</span>
+                    <span className="text-xs text-white/50">Contrats sains</span>
                   </div>
                 </div>
               </div>
 
               {/* Timeline */}
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                 <SecurityTimeline timeline={selectedContract.timeline} />
               </div>
 
               {/* Contract selector */}
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Contrat analysé</p>
+              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-4">Contrat analysé</p>
                 <div className="space-y-2">
                   {contracts.map((c) => (
                     <ContractCard
@@ -1383,10 +1433,10 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                 <div className="mb-6">
-                  <h2 className="text-base font-semibold text-slate-900">Analyser un contrat</h2>
-                  <p className="text-sm text-slate-500 mt-1">
+                  <h2 className="text-base font-semibold text-white">Analyser un contrat</h2>
+                  <p className="text-sm text-white/50 mt-1">
                     Importez un fichier <code className="font-mono text-primary-500">.sol</code> ou collez votre code. Le résultat sera ajouté à vos analyses.
                   </p>
                 </div>
@@ -1399,47 +1449,19 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Résultat de la dernière analyse (caché pendant un nouveau scan) */}
-              {scanResult && !isScanning && (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-slate-700">Résultat — {scanResult.name}</h3>
-                    <div className="flex items-center gap-3">
-                      <HealthGauge score={scanResult.score} />
-                    </div>
-                  </div>
-                  <CodeDiagnostic contract={scanResult} />
-                  <div className="pt-2 border-t border-slate-100 flex gap-3">
-                    <button
-                      onClick={() => { setSelectedContract(scanResult); setActiveSection("diagnostic"); }}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-md transition-colors"
-                    >
-                      <FileCode2 className="w-4 h-4" />
-                      Voir dans Code & Diagnostic
-                    </button>
-                    <button
-                      onClick={() => { setSelectedContract(scanResult); setActiveSection("overview"); }}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
-                    >
-                      <LayoutDashboard className="w-4 h-4" />
-                      Voir dans la vue d&apos;ensemble
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
           {/* ── Code & Diagnostic ───────────────────────────────────────── */}
           {activeSection === "diagnostic" && !selectedContract && (
             <div className="max-w-5xl mx-auto flex flex-col items-center justify-center gap-4 py-20 text-center">
-              <ShieldAlert className="w-12 h-12 text-slate-300" />
-              <p className="text-slate-500 text-sm">Aucun contrat sélectionné.</p>
+              <ShieldAlert className="w-12 h-12 text-white/30" />
+              <p className="text-white/50 text-sm">Aucun contrat sélectionné.</p>
             </div>
           )}
           {activeSection === "diagnostic" && selectedContract && (
             <div className="max-w-5xl mx-auto space-y-4">
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                 {/* Contract picker inline */}
                 <div className="flex items-center gap-2 flex-wrap mb-5">
                   {contracts.map((c) => {
@@ -1450,9 +1472,10 @@ export default function DashboardPage() {
                         onClick={() => setSelectedContract(c)}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                           c.id === selectedContract.id
-                            ? "bg-primary-50 border-primary-300 text-primary-700"
-                            : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                            ? "border-primary-500/50 text-primary-400"
+                            : "text-white/60 hover:border-white/20 hover:text-white"
                         }`}
+                        style={{ background: c.id === selectedContract.id ? "rgba(44,190,136,0.15)" : "rgba(255,255,255,0.05)", borderColor: c.id === selectedContract.id ? undefined : "rgba(255,255,255,0.1)" }}
                       >
                         <span className={`w-2 h-2 rounded-full ${bg}`} />
                         {c.name}
@@ -1469,8 +1492,8 @@ export default function DashboardPage() {
           {activeSection === "analyses" && (
             <div className="max-w-5xl mx-auto space-y-6">
               {/* Contracts */}
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Contrats pré-stockés</p>
+              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-4">Contrats pré-stockés</p>
                 <div className="space-y-3">
                   {contracts.map((c) => {
                     const { text, ring } = scoreColor(c.score);
@@ -1478,19 +1501,20 @@ export default function DashboardPage() {
                       <button
                         key={c.id}
                         onClick={() => { setSelectedContract(c); setActiveSection("diagnostic"); }}
-                        className="w-full text-left flex items-center gap-4 px-4 py-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white transition-colors"
+                        className="w-full text-left flex items-center gap-4 px-4 py-4 rounded-xl transition-colors hover:bg-white/5"
+                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
                       >
                         <div className="w-12 h-12 rounded-full border-4 flex items-center justify-center shrink-0" style={{ borderColor: ring }}>
                           <span className={`text-sm font-bold ${text}`}>{c.score}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-semibold text-slate-800">{c.name}</p>
+                            <p className="text-sm font-semibold text-white">{c.name}</p>
                             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.score >= 80 ? "bg-emerald-50 text-emerald-600" : c.score >= 50 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"}`}>
                               {scoreLabel(c.score)}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-white/40">
                             {c.issues.length} issue{c.issues.length !== 1 ? "s" : ""} · Dernière analyse le {c.lastAnalyzed}
                           </p>
                         </div>
@@ -1519,31 +1543,31 @@ export default function DashboardPage() {
                 const page = Math.min(histPage, totalPages);
                 const rows = allRows.slice((page - 1) * HIST_PER_PAGE, page * HIST_PER_PAGE);
                 return (
-                  <div className="bg-white rounded-xl border border-slate-200 p-6">
+                  <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
                     <div className="flex items-center justify-between mb-4">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Historique des analyses</p>
-                      <p className="text-xs text-slate-400">{allRows.length} analyse{allRows.length !== 1 ? "s" : ""}</p>
+                      <p className="text-xs font-semibold text-white/50 uppercase tracking-wide">Historique des analyses</p>
+                      <p className="text-xs text-white/40">{allRows.length} analyse{allRows.length !== 1 ? "s" : ""}</p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-slate-100">
-                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Contrat</th>
-                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Date</th>
-                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Score</th>
-                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Issues</th>
-                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Statut</th>
+                          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-white/40">Contrat</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-white/40">Date</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-white/40">Score</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-white/40">Issues</th>
+                            <th className="text-left py-2 px-3 text-xs font-medium text-white/40">Statut</th>
                           </tr>
                         </thead>
                         <tbody>
                           {rows.map((row) => (
-                            <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                              <td className="py-2.5 px-3 font-medium text-slate-800">{row.contract}</td>
-                              <td className="py-2.5 px-3 text-slate-500 text-xs">{row.date}</td>
+                            <tr key={row.key} className="hover:bg-white/5 transition-colors" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                              <td className="py-2.5 px-3 font-medium text-white">{row.contract}</td>
+                              <td className="py-2.5 px-3 text-white/50 text-xs">{row.date}</td>
                               <td className="py-2.5 px-3">
                                 <span className={`font-semibold ${scoreColor(row.score).text}`}>{row.score}/100</span>
                               </td>
-                              <td className="py-2.5 px-3 text-slate-600">{row.issues}</td>
+                              <td className="py-2.5 px-3 text-white/60">{row.issues}</td>
                               <td className="py-2.5 px-3">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                                   row.score >= 80 ? "bg-emerald-50 text-emerald-600" : row.score >= 50 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
@@ -1557,19 +1581,19 @@ export default function DashboardPage() {
                       </table>
                     </div>
                     {totalPages > 1 && (
-                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+                      <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                         <button
                           onClick={() => setHistPage((p) => Math.max(1, p - 1))}
                           disabled={page <= 1}
-                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg text-white/60 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" style={{ border: "1px solid rgba(255,255,255,0.12)" }}
                         >
                           ← Précédent
                         </button>
-                        <span className="text-xs text-slate-500">Page {page} / {totalPages}</span>
+                        <span className="text-xs text-white/40">Page {page} / {totalPages}</span>
                         <button
                           onClick={() => setHistPage((p) => Math.min(totalPages, p + 1))}
                           disabled={page >= totalPages}
-                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg text-white/60 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" style={{ border: "1px solid rgba(255,255,255,0.12)" }}
                         >
                           Suivant →
                         </button>

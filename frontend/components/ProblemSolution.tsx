@@ -28,13 +28,13 @@ export function ProblemSolution() {
         <div className="grid sm:grid-cols-3 gap-12 lg:gap-16">
           {features.map(({ icon: Icon, title, description }) => (
             <div key={title} className="text-center">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-md border border-slate-200 text-primary-500 mb-4">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-md text-primary-500 mb-4" style={{ border: "1px solid rgba(44,190,136,0.25)", background: "rgba(44,190,136,0.06)" }}>
                 <Icon className="w-5 h-5" strokeWidth={1.5} />
               </div>
-              <h3 className="text-base font-semibold text-primary-900">
+              <h3 className="text-base font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
                 {title}
               </h3>
-              <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+              <p className="mt-2 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
                 {description}
               </p>
             </div>
