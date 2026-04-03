@@ -21,10 +21,12 @@ export async function POST(req: NextRequest) {
     backendRes = await fetch(`${BACKEND_URL}/scan`, {
       method: "POST",
       body: formData,
+      signal: AbortSignal.timeout(600_000), // 10 min — Mythril + GNN peuvent être lents
     });
-  } catch {
+  } catch (err) {
+    const isTimeout = err instanceof Error && err.name === "TimeoutError";
     return NextResponse.json(
-      { detail: "Impossible de joindre le backend FastAPI." },
+      { detail: isTimeout ? "L'analyse a dépassé le délai maximal (10 min)." : "Impossible de joindre le backend FastAPI." },
       { status: 502 }
     );
   }

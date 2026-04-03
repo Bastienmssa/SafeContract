@@ -36,10 +36,12 @@ module.exports = {
       env: {
         PYTHONUNBUFFERED: "1",
         PATH: `${__dirname}/backend/.venv/bin:${process.env.PATH}`,
+        MYTH_BINARY: `${__dirname}/backend/.venv-mythril/bin/myth`,
       },
       env_production: {
         PYTHONUNBUFFERED: "1",
         PATH: `${__dirname}/backend/.venv/bin:${process.env.PATH}`,
+        MYTH_BINARY: `${__dirname}/backend/.venv-mythril/bin/myth`,
       },
     },
   ],

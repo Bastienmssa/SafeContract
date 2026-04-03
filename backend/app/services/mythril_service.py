@@ -1,15 +1,22 @@
 import subprocess
 import json
 import shutil
+import os
+
+
+def _myth_bin() -> str:
+    """Retourne le chemin vers le binaire myth (MYTH_BINARY ou PATH)."""
+    return os.environ.get("MYTH_BINARY", "myth")
 
 
 def is_available() -> bool:
-    return shutil.which("myth") is not None
+    binary = _myth_bin()
+    return os.path.isfile(binary) or shutil.which(binary) is not None
 
 
 def get_version() -> str:
     try:
-        r = subprocess.run(["myth", "version"], capture_output=True, text=True, timeout=10)
+        r = subprocess.run([_myth_bin(), "version"], capture_output=True, text=True, timeout=10)
         return r.stdout.strip() or r.stderr.strip()
     except Exception:
         return "?"
@@ -23,7 +30,7 @@ def analyze_contract(contract_path: str) -> dict:
     if not is_available():
         return {"issues": [], "error": "Mythril non installé (pip install mythril)"}
 
-    command = ["myth", "analyze", contract_path, "-o", "json"]
+    command = [_myth_bin(), "analyze", contract_path, "-o", "json"]
     result = subprocess.run(command, capture_output=True, text=True, timeout=300)
 
     output = result.stdout.strip()

@@ -33,13 +33,21 @@ if [ ! -d "$BACKEND_VENV" ]; then
   python3 -m venv "$BACKEND_VENV"
 fi
 
-echo "==> Installing backend dependencies"
+echo "==> Installing backend dependencies (main venv)"
 "$BACKEND_VENV/bin/pip" install --upgrade pip
 "$BACKEND_VENV/bin/pip" install fastapi uvicorn python-multipart motor python-dotenv
-"$BACKEND_VENV/bin/pip" install mythril
 "$BACKEND_VENV/bin/pip" install slither-analyzer solc-select pyyaml
 "$BACKEND_VENV/bin/pip" install torch torch-geometric transformers
 "$BACKEND_VENV/bin/pip" install ollama markdown2 weasyprint
+
+# Mythril dans un venv isolé pour éviter les conflits eth-* avec Slither
+MYTHRIL_VENV="$BACKEND_DIR/.venv-mythril"
+echo "==> Installing Mythril in isolated venv ($MYTHRIL_VENV)"
+if [ ! -d "$MYTHRIL_VENV" ]; then
+  python3 -m venv "$MYTHRIL_VENV"
+fi
+"$MYTHRIL_VENV/bin/pip" install --upgrade pip
+"$MYTHRIL_VENV/bin/pip" install mythril
 
 if [ ! -x "$BACKEND_VENV/bin/myth" ]; then
   echo "WARNING: myth CLI not found in backend venv. /scan will fail until Mythril installs successfully."
