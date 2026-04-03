@@ -38,6 +38,7 @@ Le JSON retourne :
 import sys
 import os
 import json
+import shutil
 import tempfile
 import torch
 
@@ -82,10 +83,18 @@ def analyser_contrat(chemin_sol: str, chemin_rapport: str = None) -> dict:
     with tempfile.TemporaryDirectory() as tmpdir:
         chemin_json = os.path.join(tmpdir, "graphe.json")
         chemin_pt   = os.path.join(tmpdir, "graphe.pt")
-
-        # Phase 1 : extraction Slither
+        # Copie dans un sous-dossier dédié : imports relatifs (./X.sol) résolus au même endroit
+        work = os.path.join(tmpdir, "workspace")
+        os.makedirs(work, exist_ok=True)
+        chemin_local = os.path.join(work, nom)
         try:
-            succes = extraire_contrat_local(chemin_sol, chemin_json)
+            shutil.copy2(chemin_sol, chemin_local)
+        except OSError as e:
+            return {"success": False, "contrat": nom, "findings": [], "resume": {}, "erreur": f"Copie contrat : {e}"}
+
+        # Phase 1 : extraction Slither (+ fallback graphe source si échec)
+        try:
+            succes = extraire_contrat_local(chemin_local, chemin_json)
             if not succes:
                 return {"success": False, "contrat": nom, "findings": [], "resume": {}, "erreur": "Echec extraction Slither"}
         except Exception as e:

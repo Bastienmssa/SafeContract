@@ -24,6 +24,7 @@ import {
   Bot,
   Sparkles,
   Search,
+  FileDown,
 } from "lucide-react";
 import { Contract, Issue, Severity, AiVerdict } from "./data";
 
@@ -52,7 +53,7 @@ interface AggregatedReport {
   ai_verdict?: AiVerdict;
 }
 
-function reportToContract(report: AggregatedReport, filename: string, code: string): Contract {
+function reportToContract(report: AggregatedReport, filename: string, code: string, dbId?: string): Contract {
   const issues: Issue[] = report.issues.map((i) => ({
     line: i.line ?? 0,
     severity: (i.severity === "critical" || i.severity === "medium" || i.severity === "low"
@@ -70,7 +71,7 @@ function reportToContract(report: AggregatedReport, filename: string, code: stri
   const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 
   return {
-    id: String(Date.now()),
+    id: dbId ?? String(Date.now()),
     name: filename,
     score: report.score,
     lastAnalyzed: new Date().toISOString().slice(0, 10),
@@ -253,7 +254,7 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.detail ?? `Erreur HTTP ${res.status}`);
 
-      const contract = reportToContract(json.report ?? json, filename, code);
+      const contract = reportToContract(json.report ?? json, filename, code, json.id ?? undefined);
       setStatus("idle");
       onResult(contract);
     } catch (err: unknown) {
@@ -946,6 +947,8 @@ export default function DashboardPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [scanResult, setScanResult] = useState<Contract | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState<"pdf" | "markdown" | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("sc_auth") !== "admin") {
@@ -967,6 +970,33 @@ export default function DashboardPage() {
   function handleLogout() {
     localStorage.removeItem("sc_auth");
     router.push("/");
+  }
+
+  async function downloadReport(format: "pdf" | "markdown") {
+    if (!selectedContract?.id) return;
+    setDownloadingReport(format);
+    setDownloadError(null);
+    try {
+      const res = await fetch(`/api/analyses/${selectedContract.id}/rapport?format=${format}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: `Erreur HTTP ${res.status}` }));
+        throw new Error(body.detail ?? `Erreur ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rapport_${selectedContract.name.replace(".sol", "").replace(".vy", "")}.${format === "pdf" ? "pdf" : "md"}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Révoquer après un délai pour laisser le navigateur démarrer le téléchargement
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setDownloadingReport(null);
+    }
   }
 
   async function handleScanResult(c: Contract) {
@@ -1067,6 +1097,40 @@ export default function DashboardPage() {
                   <HealthGauge score={selectedContract.score} />
                   <span className={`text-sm font-semibold ${scoreText}`}>{scoreLabel(selectedContract.score)}</span>
                   <p className="text-xs text-slate-400 text-center">{selectedContract.name}</p>
+                  {/* Boutons rapport */}
+                  {selectedContract.id && (
+                    <div className="flex flex-col gap-1.5 mt-1 w-full">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => downloadReport("pdf")}
+                          disabled={downloadingReport !== null}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors"
+                        >
+                          {downloadingReport === "pdf" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <FileDown className="w-3 h-3" />
+                          )}
+                          PDF
+                        </button>
+                        <button
+                          onClick={() => downloadReport("markdown")}
+                          disabled={downloadingReport !== null}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-100 disabled:cursor-not-allowed rounded-md transition-colors"
+                        >
+                          {downloadingReport === "markdown" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <FileDown className="w-3 h-3" />
+                          )}
+                          Markdown
+                        </button>
+                      </div>
+                      {downloadError && (
+                        <p className="text-xs text-red-500 text-center">{downloadError}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Stats */}

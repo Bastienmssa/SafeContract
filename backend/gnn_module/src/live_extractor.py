@@ -132,10 +132,53 @@ def _generer_stub(nom_contrat: str, methodes: dict) -> str:
     return "\n".join(lines)
 
 
+def _symboles_importes_pour_chemin(source: str, chemin_cible: str) -> list[str]:
+    """Extrait les noms dans import { A, B } from \"...chemin...\" si présent."""
+    syms: list[str] = []
+    for line in source.splitlines():
+        if chemin_cible not in line or ".sol" not in line:
+            continue
+        m = re.search(
+            r"import\s+\{([^}]+)\}\s+from\s+[\"']([^\"']+)[\"']",
+            line,
+        )
+        if not m:
+            continue
+        if m.group(2).rstrip(";").strip() != chemin_cible:
+            continue
+        for part in m.group(1).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            # "IERC20 as T" -> IERC20
+            syms.append(part.split()[0])
+    return syms
+
+
+def _generer_stub_interfaces(chemin_import: str, symboles: list[str], source: str) -> str:
+    """
+    Stub minimal pour un fichier .sol manquant.
+    Si symboles (import {A,B}), génère des interfaces vides (compile avec plus de cas).
+    Sinon stub « contrat + méthodes » déduit des usages (types externes).
+    """
+    base = os.path.splitext(os.path.basename(chemin_import))[0]
+    if symboles:
+        lines = [
+            "// SPDX-License-Identifier: MIT",
+            "pragma solidity ^0.8.0;",
+            "",
+        ]
+        for s in symboles:
+            lines.append(f"interface {s} {{}}")
+        return "\n".join(lines)
+    methodes = _analyser_usages(source, base)
+    return _generer_stub(base, methodes)
+
+
 def _creer_stubs_imports(chemin_fichier: str) -> list:
     """
-    Lit le fichier .sol, identifie les imports relatifs manquants,
-    crée des stubs minimaux dans le même dossier temporaire.
+    Lit le fichier .sol, identifie les imports .sol manquants (relatifs ou sous-chemins),
+    crée des stubs minimaux à l'emplacement attendu par solc.
     Retourne la liste des fichiers stubs créés.
     """
     dir_fichier = os.path.dirname(chemin_fichier)
@@ -145,34 +188,107 @@ def _creer_stubs_imports(chemin_fichier: str) -> list:
     except Exception:
         return []
 
-    # Capture : import "./X.sol"  ou  import {A} from "./X.sol"
-    imports_relatifs = re.findall(
-        r'import\s+[^;]*["\'](\.[^"\']+\.sol)["\']',
+    # Tous les chemins se terminant par .sol entre guillemets (hors chemins absolus disque)
+    imports_tous = re.findall(
+        r'import\s+[^;]*["\']([^"\']+\.sol)["\']',
         source,
     )
 
     stubs_crees = []
-    for chemin_import in set(imports_relatifs):
-        chemin_abs = os.path.normpath(
-            os.path.join(dir_fichier, chemin_import)
-        )
+    for chemin_import in set(imports_tous):
+        if not chemin_import or chemin_import.startswith("/"):
+            continue
+        chemin_abs = os.path.normpath(os.path.join(dir_fichier, chemin_import))
         if os.path.exists(chemin_abs):
-            continue  # Import déjà présent, rien à faire
+            continue
 
-        nom_contrat = os.path.splitext(os.path.basename(chemin_import))[0]
-        methodes = _analyser_usages(source, nom_contrat)
-        stub_code = _generer_stub(nom_contrat, methodes)
+        symboles = _symboles_importes_pour_chemin(source, chemin_import)
+        stub_code = _generer_stub_interfaces(chemin_import, symboles, source)
 
         try:
             os.makedirs(os.path.dirname(chemin_abs), exist_ok=True)
             with open(chemin_abs, "w", encoding="utf-8") as f:
                 f.write(stub_code)
             stubs_crees.append(chemin_abs)
-            print(f"    [i] Stub généré : {os.path.basename(chemin_abs)}")
+            print(f"    [i] Stub généré : {chemin_import}")
         except Exception as e:
             print(f"    [!] Impossible de créer le stub {chemin_abs} : {e}")
 
     return stubs_crees
+
+
+def _graphe_fallback_depuis_source(chemin_fichier: str, chemin_sortie: str) -> bool:
+    """
+    Si Slither échoue (solc, imports complexes, .vy, etc.), construit un graphe
+    ligne à ligne pour permettre au GNN + vectoriseur de tourner quand même.
+    Moins précis qu'un CFG Slither, mais évite l'échec total en mode « IA seule ».
+    """
+    try:
+        with open(chemin_fichier, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except Exception as e:
+        print(f"    [!] Fallback : lecture fichier impossible : {e}")
+        return False
+
+    nom_fichier = os.path.basename(chemin_fichier)
+    contract_name = "Contract"
+    for line in lines:
+        m = re.search(r"\b(?:contract|interface)\s+(\w+)", line)
+        if m:
+            contract_name = m.group(1)
+            break
+
+    noeuds = []
+    aretes = []
+    max_nodes = 320
+    idx = 0
+    for line_num, line in enumerate(lines, start=1):
+        if idx >= max_nodes:
+            break
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+            continue
+        if stripped in {"*/", "{", "}"}:
+            continue
+
+        noeuds.append({
+            "noeud_id": f"fallback_{idx}",
+            "type": "NodeType.EXPRESSION",
+            "contenu": stripped[:260],
+            "lignes": [line_num],
+            "label_vulnerable": 0,
+        })
+        if idx > 0:
+            aretes.append([idx - 1, idx])
+        idx += 1
+
+    if not noeuds:
+        noeuds.append({
+            "noeud_id": "fallback_0",
+            "type": "NodeType.EXPRESSION",
+            "contenu": "// (fichier vide ou non lisible)",
+            "lignes": [1],
+            "label_vulnerable": 0,
+        })
+
+    donnees_ast = {
+        nom_fichier: {
+            "nom_contrat": contract_name,
+            "graphe_noeuds": noeuds,
+            "aretes": aretes,
+        }
+    }
+    try:
+        with open(chemin_sortie, "w", encoding="utf-8") as f:
+            json.dump(donnees_ast, f, indent=4)
+    except OSError as e:
+        print(f"    [!] Fallback : écriture JSON impossible : {e}")
+        return False
+
+    print(f"    [i] Graphe de secours généré ({len(noeuds)} nœuds) — Slither indisponible ou incomplet.")
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -260,27 +376,33 @@ def extraire_contrat_local(chemin_fichier: str, chemin_sortie: str) -> bool:
     Extrait l'AST/CFG d'un contrat Solidity.
 
     Stratégie :
-      1. Essai direct avec Slither.
-      2. Si échec (imports manquants), génère des stubs minimaux puis réessaie.
-      3. Nettoie les stubs dans tous les cas.
+      1. Slither direct (retour False ou exception → poursuite).
+      2. Stubs pour imports .sol manquants, puis nouveau Slither.
+      3. Si toujours impossible : graphe de secours ligne à ligne (GNN exploitable,
+         ex. mode « IA seule » ou imports OpenZeppelin non installés).
     """
+    erreur_originale = ""
+
     # --- Tentative 1 : Slither direct ---
     try:
-        return _extraire_avec_slither(chemin_fichier, chemin_sortie)
+        if _extraire_avec_slither(chemin_fichier, chemin_sortie):
+            return True
+        erreur_originale = "Slither : aucun graphe valide"
     except Exception as e:
         erreur_originale = str(e)
         print(f"    [!] Slither (essai 1) : {erreur_originale[:200]}")
 
-    # --- Tentative 2 : avec stubs pour les imports manquants ---
+    # --- Tentative 2 : stubs puis Slither ---
     stubs_crees = []
     try:
         stubs_crees = _creer_stubs_imports(chemin_fichier)
-        if stubs_crees:
-            return _extraire_avec_slither(chemin_fichier, chemin_sortie)
-        # Pas de stubs générés (imports non relatifs ou déjà présents)
-        print(f"    [!] Aucun stub généré, imports non résolubles.")
-    except Exception as e2:
-        print(f"    [!] Slither (essai 2 avec stubs) : {e2}")
+        try:
+            if _extraire_avec_slither(chemin_fichier, chemin_sortie):
+                return True
+        except Exception as e2:
+            print(f"    [!] Slither (essai 2 avec stubs) : {str(e2)[:200]}")
+        if not stubs_crees:
+            print("    [!] Aucun stub .sol généré (imports absolus ou déjà présents).")
     finally:
         for stub in stubs_crees:
             try:
@@ -288,7 +410,11 @@ def extraire_contrat_local(chemin_fichier: str, chemin_sortie: str) -> bool:
             except OSError:
                 pass
 
-    print(f"    [!] Echec de Slither : {erreur_originale}")
+    # --- Tentative 3 : graphe heuristique (pas de Slither) ---
+    if _graphe_fallback_depuis_source(chemin_fichier, chemin_sortie):
+        return True
+
+    print(f"    [!] Echec extraction : {erreur_originale[:200]}")
     return False
 
 
