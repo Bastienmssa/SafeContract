@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -189,19 +189,56 @@ const TOOL_LABELS: Record<string, string> = {
   ai: "IA SafeContract",
 };
 
+// ─── Toast ───────────────────────────────────────────────────────────────────
+
+interface ToastData { type: "success" | "error"; msg: string; key: number; }
+
+function Toast({ data, onDismiss }: { data: ToastData; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  return (
+    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm animate-in slide-in-from-bottom-4 fade-in duration-300 ${
+      data.type === "success" ? "bg-white border-emerald-200" : "bg-white border-red-200"
+    }`}>
+      {data.type === "success"
+        ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+        : <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />}
+      <span className={`text-sm font-medium flex-1 ${data.type === "success" ? "text-emerald-800" : "text-red-800"}`}>
+        {data.msg}
+      </span>
+      <button onClick={onDismiss} className="text-slate-400 hover:text-slate-600 shrink-0 ml-1">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 // ─── AnalyseScan component ────────────────────────────────────────────────────
 
-function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
+function AnalyseScan({
+  onResult,
+  isGloballyScanning,
+  onScanStart,
+  onScanError,
+  onScanFinally,
+}: {
+  onResult: (c: Contract) => void;
+  isGloballyScanning: boolean;
+  onScanStart: (filename: string) => void;
+  onScanError: (msg: string) => void;
+  onScanFinally: () => void;
+}) {
   const [selectedPackages, setSelectedPackages] = useState<Set<PackageId>>(new Set<PackageId>(["dynamique"]));
   const [aiSelected, setAiSelected] = useState(false);
   const [contractText, setContractText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasInput = uploadedFile !== null || contractText.trim().length > 0;
-  // Au moins un outil doit être sélectionné (package ou IA)
   const hasTools = selectedPackages.size > 0 || aiSelected;
 
   function togglePackage(id: PackageId) {
@@ -251,15 +288,15 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!hasInput || !hasTools) return;
-    setStatus("loading");
+    if (!hasInput || !hasTools || isGloballyScanning) return;
     setErrorMsg("");
 
-    try {
-      const file = uploadedFile ?? new File([contractText], "contract.sol", { type: "text/plain" });
-      const filename = file.name;
-      const code = uploadedFile ? await file.text() : contractText;
+    const file = uploadedFile ?? new File([contractText], "contract.sol", { type: "text/plain" });
+    const filename = file.name;
+    const code = uploadedFile ? await file.text() : contractText;
 
+    onScanStart(filename);
+    try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("tools", JSON.stringify(getSelectedTools()));
@@ -272,19 +309,24 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
       }
 
       const json = await res.json();
+      if (res.status === 409) {
+        throw new Error("Une analyse est déjà en cours sur le serveur. Attendez qu'elle se termine.");
+      }
       if (!res.ok) throw new Error(json.detail ?? `Erreur HTTP ${res.status}`);
 
       const contract = reportToContract(json.report ?? json, filename, code, json.id ?? undefined);
-      setStatus("idle");
       onResult(contract);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Erreur inconnue");
-      setStatus("error");
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      setErrorMsg(msg);
+      onScanError(msg);
+    } finally {
+      onScanFinally();
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className={`space-y-5 transition-opacity ${isGloballyScanning ? "opacity-60 pointer-events-none select-none" : ""}`}>
 
       {/* Package selector */}
       <div>
@@ -299,7 +341,7 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
               <button
                 key={id}
                 type="button"
-                disabled={!available}
+                disabled={!available || isGloballyScanning}
                 onClick={() => togglePackage(id)}
                 className={`relative text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border-2 transition-all ${
                   !available
@@ -433,11 +475,11 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
         </>
       )}
 
-      {status === "error" && (
+      {errorMsg && !isGloballyScanning && (
         <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">{errorMsg}</div>
       )}
 
-      {!hasTools && (
+      {!hasTools && !isGloballyScanning && (
         <p className="text-xs text-amber-600 text-center">
           Sélectionnez au moins un type d&apos;analyse.
         </p>
@@ -445,10 +487,10 @@ function AnalyseScan({ onResult }: { onResult: (c: Contract) => void }) {
 
       <button
         type="submit"
-        disabled={!hasInput || !hasTools || status === "loading"}
+        disabled={!hasInput || !hasTools || isGloballyScanning}
         className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors"
       >
-        {status === "loading" ? (
+        {isGloballyScanning ? (
           <><Loader2 className="w-4 h-4 animate-spin" />Analyse en cours…</>
         ) : (
           <>Lancer l&apos;analyse<ArrowRight className="w-4 h-4" /></>
@@ -963,37 +1005,135 @@ const NAV = [
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState("overview");
+
+  // ── État de base ──────────────────────────────────────────────────────────
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
-  const [scanResult, setScanResult] = useState<Contract | null>(null);
   const [downloadingReport, setDownloadingReport] = useState<"pdf" | "markdown" | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  // ── État global du scan (unique à la fois) ───────────────────────────────
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanningFileName, setScanningFileName] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  // true = scan détecté au chargement de la page (pas démarré par l'utilisateur)
+  // → active le polling pour détecter la fin du scan
+  const [isResumedScan, setIsResumedScan] = useState(false);
+
+  // ── Helper : recharge la liste des contrats depuis la DB ─────────────────
+  const refreshContracts = useCallback(async (preferName?: string) => {
+    try {
+      const r = await fetch("/api/analyses");
+      const data: RawAnalysis[] = await r.json();
+      if (Array.isArray(data)) {
+        const built = buildContracts(data);
+        setContracts(built);
+        setSelectedContract((prev) => {
+          const byName = preferName ? built.find((b) => b.name === preferName) : null;
+          const current = prev ? built.find((b) => b.name === prev.name) ?? null : null;
+          return byName ?? current ?? built[0] ?? null;
+        });
+      }
+    } catch { /* réseau indisponible, on garde l'état actuel */ }
+  }, []);
+
+  // ── État persisté en sessionStorage (survit au F5, effacé à fermeture onglet) ──
+  const [activeSection, setActiveSectionState] = useState("overview");
+  const [scanResult, setScanResultState] = useState<Contract | null>(null);
+
+  function setActiveSection(s: string) {
+    setActiveSectionState(s);
+    sessionStorage.setItem("sc_active_section", s);
+    // Rafraîchir la liste des contrats quand l'utilisateur visite ces onglets
+    if (s === "overview" || s === "analyses") {
+      refreshContracts();
+    }
+  }
+
+  function setScanResult(c: Contract | null) {
+    setScanResultState(c);
+    if (c) sessionStorage.setItem("sc_scan_result", JSON.stringify(c));
+    else sessionStorage.removeItem("sc_scan_result");
+  }
+
+  const handleScanStart = useCallback((filename: string) => {
+    setIsScanning(true);
+    setScanningFileName(filename);
+    setIsResumedScan(false); // Scan lancé depuis cette session → pas de polling
+  }, []);
+
+  const handleScanError = useCallback((msg: string) => {
+    setToast({ type: "error", msg: `Analyse échouée — ${msg.slice(0, 80)}`, key: Date.now() });
+  }, []);
+
+  const handleScanFinally = useCallback(() => {
+    setIsScanning(false);
+    setScanningFileName("");
+  }, []);
+
+  // ── Chargement initial ────────────────────────────────────────────────────
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("sc_auth") !== "admin") {
       router.replace("/connexion");
       return;
     }
-    fetch("/api/analyses")
+    // Restaurer la section active et le dernier résultat de scan
+    const savedSection = sessionStorage.getItem("sc_active_section");
+    if (savedSection) setActiveSectionState(savedSection);
+    const savedResult = sessionStorage.getItem("sc_scan_result");
+    if (savedResult) {
+      try { setScanResultState(JSON.parse(savedResult)); } catch { /* JSON invalide, ignoré */ }
+    }
+    // Vérifier si un scan tourne déjà sur le backend (cas du refresh pendant un scan)
+    fetch("/api/scan")
       .then((r) => r.json())
-      .then((data: RawAnalysis[]) => {
-        if (Array.isArray(data)) {
-          const built = buildContracts(data);
-          setContracts(built);
-          if (built.length > 0) setSelectedContract(built[0]);
+      .then((data: { scanning?: boolean; filename?: string }) => {
+        if (data.scanning) {
+          setIsScanning(true);
+          setScanningFileName(data.filename || "Analyse en cours sur le serveur…");
+          setIsResumedScan(true); // Active le polling
         }
       })
       .catch(() => {});
-  }, [router]);
+    // Charger les analyses depuis MongoDB
+    refreshContracts();
+  }, [router, refreshContracts]);
+
+  // ── Polling : détecte la fin d'un scan repris après refresh ──────────────
+  // Ne s'active que si isResumedScan=true (scan détecté au chargement, non lancé par l'user)
+  useEffect(() => {
+    if (!isResumedScan) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/scan");
+        const data: { scanning?: boolean; filename?: string } = await res.json();
+        if (!data.scanning) {
+          clearInterval(interval);
+          setIsResumedScan(false);
+          setIsScanning(false);
+          setScanningFileName("");
+          await refreshContracts();
+          setToast({ type: "success", msg: "Analyse terminée — résultats mis à jour", key: Date.now() });
+        }
+      } catch { /* ignore — on réessaiera dans 3s */ }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [isResumedScan, refreshContracts]);
 
   function handleLogout() {
+    if (isScanning && !window.confirm(`Une analyse de "${scanningFileName}" est en cours. Se déconnecter l'annulera. Continuer ?`)) {
+      return;
+    }
     localStorage.removeItem("sc_auth");
+    sessionStorage.removeItem("sc_active_section");
+    sessionStorage.removeItem("sc_scan_result");
     router.push("/");
   }
 
   async function downloadReport(format: "pdf" | "markdown") {
-    if (!selectedContract?.id) return;
+    if (!selectedContract?.id || isScanning || downloadingReport !== null) return;
     setDownloadingReport(format);
     setDownloadError(null);
     try {
@@ -1021,19 +1161,8 @@ export default function DashboardPage() {
 
   async function handleScanResult(c: Contract) {
     setScanResult(c);
-    try {
-      const res = await fetch("/api/analyses");
-      const data: RawAnalysis[] = await res.json();
-      if (Array.isArray(data)) {
-        const built = buildContracts(data);
-        setContracts(built);
-        const updated = built.find((b) => b.name === c.name) ?? c;
-        setSelectedContract(updated);
-      }
-    } catch {
-      setContracts((prev) => [c, ...prev]);
-      setSelectedContract(c);
-    }
+    setToast({ type: "success", msg: `Analyse terminée — ${c.name}`, key: Date.now() });
+    await refreshContracts(c.name);
   }
 
   const { text: scoreText } = scoreColor(selectedContract?.score ?? 0);
@@ -1068,7 +1197,10 @@ export default function DashboardPage() {
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
-              {label}
+              <span className="flex-1 text-left">{label}</span>
+              {id === "scan" && isScanning && (
+                <Loader2 className="w-3 h-3 animate-spin text-primary-500 shrink-0" />
+              )}
             </button>
           ))}
         </nav>
@@ -1091,9 +1223,20 @@ export default function DashboardPage() {
           <h1 className="text-base font-semibold text-slate-900">
             {NAV.find((n) => n.id === activeSection)?.label}
           </h1>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold">A</div>
-            <span className="text-sm font-medium text-slate-700">admin</span>
+          <div className="flex items-center gap-3">
+            {isScanning && activeSection !== "scan" && (
+              <button
+                onClick={() => setActiveSection("scan")}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
+              >
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Analyse en cours…
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold">A</div>
+              <span className="text-sm font-medium text-slate-700">admin</span>
+            </div>
           </div>
         </header>
 
@@ -1123,7 +1266,8 @@ export default function DashboardPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => downloadReport("pdf")}
-                          disabled={downloadingReport !== null}
+                          disabled={downloadingReport !== null || isScanning}
+                          title={isScanning ? "Analyse en cours, veuillez patienter" : undefined}
                           className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors"
                         >
                           {downloadingReport === "pdf" ? (
@@ -1135,7 +1279,8 @@ export default function DashboardPage() {
                         </button>
                         <button
                           onClick={() => downloadReport("markdown")}
-                          disabled={downloadingReport !== null}
+                          disabled={downloadingReport !== null || isScanning}
+                          title={isScanning ? "Analyse en cours, veuillez patienter" : undefined}
                           className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-100 disabled:cursor-not-allowed rounded-md transition-colors"
                         >
                           {downloadingReport === "markdown" ? (
@@ -1200,9 +1345,26 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── Nouvelle analyse ────────────────────────────────────────── */}
-          {activeSection === "scan" && (
+          {/* ── Nouvelle analyse — toujours monté pour conserver l'état du formulaire ── */}
+          <div className={activeSection !== "scan" ? "hidden" : ""}>
             <div className="max-w-2xl mx-auto space-y-6">
+
+              {/* Bannière scan en cours */}
+              {isScanning && (
+                <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-blue-200 bg-blue-50">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-blue-900">Analyse en cours…</p>
+                    <p className="text-sm text-blue-700 truncate">{scanningFileName}</p>
+                    <p className="text-xs text-blue-400 mt-0.5">
+                      Vous pouvez naviguer librement — l&apos;analyse se poursuit en arrière-plan.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <div className="mb-6">
                   <h2 className="text-base font-semibold text-slate-900">Analyser un contrat</h2>
@@ -1210,11 +1372,17 @@ export default function DashboardPage() {
                     Importez un fichier <code className="font-mono text-primary-500">.sol</code> ou collez votre code. Le résultat sera ajouté à vos analyses.
                   </p>
                 </div>
-                <AnalyseScan onResult={handleScanResult} />
+                <AnalyseScan
+                  onResult={handleScanResult}
+                  isGloballyScanning={isScanning}
+                  onScanStart={handleScanStart}
+                  onScanError={handleScanError}
+                  onScanFinally={handleScanFinally}
+                />
               </div>
 
-              {/* Résultat de la dernière analyse */}
-              {scanResult && (
+              {/* Résultat de la dernière analyse (caché pendant un nouveau scan) */}
+              {scanResult && !isScanning && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-700">Résultat — {scanResult.name}</h3>
@@ -1242,7 +1410,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          )}
+          </div>
 
           {/* ── Code & Diagnostic ───────────────────────────────────────── */}
           {activeSection === "diagnostic" && !selectedContract && (
@@ -1365,6 +1533,8 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      {toast && <Toast key={toast.key} data={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 import os
 import json
@@ -22,6 +23,18 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".sol", ".vy"}
 
+# Verrou global : une seule analyse à la fois sur le serveur.
+# Rejeté avec HTTP 409 si un scan est déjà en cours.
+_scan_lock = asyncio.Lock()
+_scan_filename: str = ""
+
+
+@router.get("/scan/status")
+async def scan_status():
+    """Indique si un scan est actuellement en cours sur le serveur."""
+    locked = _scan_lock.locked()
+    return {"scanning": locked, "filename": _scan_filename if locked else ""}
+
 
 def _run_tool(name: str, fn, contract_path: str) -> tuple[str, dict]:
     """Exécute un outil d'analyse et retourne (nom, résultat)."""
@@ -33,10 +46,43 @@ def _run_tool(name: str, fn, contract_path: str) -> tuple[str, dict]:
         return name, {"issues": [], "error": str(exc)}
 
 
+def _run_all_tools_sync(tools_list: list, tmp_path: str) -> dict:
+    """Lance tous les outils en parallèle.
+    Fonction synchrone — doit être appelée via asyncio.to_thread
+    pour ne pas bloquer l'event loop."""
+    tool_results: dict = {}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {
+            executor.submit(_run_tool, name, fn, tmp_path): name
+            for name, fn, _ in tools_list
+        }
+        for future in as_completed(futures):
+            tool_name, result = future.result()
+            tool_results[tool_name] = result
+            logger.info("Outil %s terminé — %d issues", tool_name, len(result.get("issues", [])))
+    return tool_results
+
+
 @router.post("/scan")
 async def scan_contract(
     file: UploadFile = File(...),
     tools: Optional[str] = Form(default=None),
+):
+    if _scan_lock.locked():
+        raise HTTPException(
+            status_code=409,
+            detail="Une analyse est déjà en cours sur le serveur. Veuillez patienter la fin de l'analyse en cours.",
+        )
+
+    async with _scan_lock:
+        global _scan_filename
+        _scan_filename = file.filename or "contract.sol"
+        return await _do_scan(file, tools)
+
+
+async def _do_scan(
+    file: UploadFile,
+    tools: Optional[str],
 ):
     # ── Validation de l'extension ─────────────────────────────────────────
     filename = file.filename or "contract.sol"
@@ -65,7 +111,7 @@ async def scan_contract(
         tmp.write(contents)
         tmp_path = tmp.name
 
-    # ── Lancement des outils en parallèle ────────────────────────────────
+    # ── Sélection des outils à lancer ────────────────────────────────────
     # Mythril et Slither supportent .sol et .vy
     # Solhint, Echidna, Foundry uniquement .sol
     all_tools = [
@@ -85,16 +131,11 @@ async def scan_contract(
     report: dict = {}
 
     try:
-        # ── Outils statiques en parallèle ────────────────────────────────────
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {
-                executor.submit(_run_tool, name, fn, tmp_path): name
-                for name, fn, _ in tools  # type: ignore[misc]
-            }
-            for future in as_completed(futures):
-                tool_name, result = future.result()
-                tool_results[tool_name] = result
-                logger.info("Outil %s terminé — %d issues", tool_name, len(result.get("issues", [])))
+        # ── Outils en parallèle dans un thread — libère l'event loop ─────────
+        # asyncio.to_thread évite que les subprocess bloquants gèlent uvicorn
+        # et permettent aux autres requêtes (/analyses, etc.) d'être servies
+        # pendant qu'un scan est en cours.
+        tool_results = await asyncio.to_thread(_run_all_tools_sync, tools, tmp_path)  # type: ignore[arg-type]
 
         # ── Versions des outils utilisés ─────────────────────────────────────
         tools_versions: dict = {}
@@ -113,7 +154,10 @@ async def scan_contract(
         if ai_requested:
             if ai_service.is_available():
                 try:
-                    ai_result = ai_service.analyze_contract(tmp_path, report["issues"])
+                    # Le modèle GNN est bloquant — on l'exécute dans un thread
+                    ai_result = await asyncio.to_thread(
+                        ai_service.analyze_contract, tmp_path, report["issues"]
+                    )
 
                     if ai_result.get("ai_issues"):
                         new_issues_added = False
