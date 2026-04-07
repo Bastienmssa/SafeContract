@@ -269,20 +269,26 @@ def _extraire_infos(analyse: dict) -> dict:
     summary = rapport.get("summary") or {}
     ai_verdict = rapport.get("ai_verdict") or {}
 
+    # Séparer les findings IA : POTENTIAL (GNN seul) et CONFIRMED (outil + GNN)
+    ai_issues_potential = [i for i in issues if i.get("tool") == "ai"]
+    ai_issues_confirmed = [i for i in issues if i.get("confirmedByGnn") and i.get("tool") != "ai"]
+
     return {
-        "nom_fichier":    analyse.get("filename", "contrat.sol"),
-        "score":          rapport.get("score", 0),
-        "issues":         issues,
-        "nb_critical":    summary.get("critical", 0),
-        "nb_medium":      summary.get("medium", 0),
-        "nb_low":         summary.get("low", 0),
-        "nb_total":       summary.get("total", len(issues)),
-        "outils_utilises":rapport.get("tools_used") or [],
-        "outils_versions":rapport.get("tools_versions") or {},
-        "outils_erreurs": rapport.get("tools_errors") or {},
-        "ai_verdict":     ai_verdict,
-        "date":           datetime.datetime.now().strftime("%d/%m/%Y"),
-        "heure":          datetime.datetime.now().strftime("%H:%M"),
+        "nom_fichier":       analyse.get("filename", "contrat.sol"),
+        "score":             rapport.get("score", 0),
+        "issues":            issues,
+        "nb_critical":       summary.get("critical", 0),
+        "nb_medium":         summary.get("medium", 0),
+        "nb_low":            summary.get("low", 0),
+        "nb_total":          summary.get("total", len(issues)),
+        "outils_utilises":   rapport.get("tools_used") or [],
+        "outils_versions":   rapport.get("tools_versions") or {},
+        "outils_erreurs":    rapport.get("tools_errors") or {},
+        "ai_verdict":        ai_verdict,
+        "ai_issues_potential": ai_issues_potential,
+        "ai_issues_confirmed": ai_issues_confirmed,
+        "date":              datetime.datetime.now().strftime("%d/%m/%Y"),
+        "heure":             datetime.datetime.now().strftime("%H:%M"),
     }
 
 
@@ -468,9 +474,71 @@ def _construire_markdown(infos: dict) -> str:
         "",
     ]
 
+    # Analyse IA
+    ai_verdict = infos["ai_verdict"]
+    ai_confirmed = infos["ai_issues_confirmed"]
+    ai_potential = infos["ai_issues_potential"]
+
+    if ai_verdict or ai_confirmed or ai_potential:
+        lignes += [
+            "## 3. Analyse par Intelligence Artificielle",
+            "",
+        ]
+
+        if ai_verdict:
+            v = ai_verdict.get("verdict", "N/A").upper()
+            v_score = ai_verdict.get("score", "N/A")
+            v_expl = ai_verdict.get("explanation", "")
+            lignes += [
+                "### Verdict global du modèle GNN",
+                "",
+                f"| Verdict | Score de confiance | Explication |",
+                f"|---------|-------------------|-------------|",
+                f"| **{v}** | {v_score} | {v_expl} |",
+                "",
+            ]
+
+        if ai_confirmed:
+            lignes += [
+                f"### Vulnérabilités confirmées par le GNN ({len(ai_confirmed)})",
+                "",
+                "> Ces findings ont été détectés par un outil **et** validés par le modèle GNN — niveau de confiance élevé.",
+                "",
+            ]
+            for f in ai_confirmed:
+                sev_fr = _SEV_FR.get(f.get("severity", "low"), "FAIBLE")
+                conf = f.get("gnnConfidence", "")
+                gnn_d = f.get("gnnDescription", "")
+                lignes += [
+                    f"- **[{sev_fr}] {f.get('title','')}** — Outil : {f.get('tool','').upper()} · Ligne : {f.get('line') or 'N/A'} · Confiance GNN : {conf}",
+                ]
+                if gnn_d:
+                    lignes.append(f"  > {gnn_d}")
+            lignes.append("")
+
+        if ai_potential:
+            lignes += [
+                f"### Vulnérabilités détectées uniquement par le GNN ({len(ai_potential)}) — POTENTIAL",
+                "",
+                "> Ces findings sont issus exclusivement du modèle GNN (aucun outil statique/dynamique ne les a signalés). Ils nécessitent une vérification manuelle.",
+                "",
+            ]
+            for f in ai_potential:
+                sev_fr = _SEV_FR.get(f.get("severity", "low"), "FAIBLE")
+                conf = f.get("gnnConfidence", "")
+                desc = f.get("gnnDescription", f.get("description", ""))
+                lignes += [
+                    f"- **[{sev_fr}] {f.get('title','')}** — Confiance : {conf}",
+                ]
+                if desc:
+                    lignes.append(f"  > {desc}")
+            lignes.append("")
+
+        lignes += ["---", ""]
+
     # Findings détaillés
     lignes += [
-        "## 3. Findings détaillés",
+        "## 4. Findings détaillés",
         "",
     ]
 
@@ -521,7 +589,7 @@ def _construire_markdown(infos: dict) -> str:
 
     # Méthodologie
     lignes += [
-        "## 4. Méthodologie",
+        "## 5. Méthodologie",
         "",
         "L'analyse a été conduite en combinant les approches suivantes :",
         "",
@@ -544,7 +612,7 @@ def _construire_markdown(infos: dict) -> str:
         "",
         "---",
         "",
-        "## 5. Avertissement légal",
+        "## 6. Avertissement légal",
         "",
         "> Ce rapport est produit automatiquement par SafeContract. Il ne constitue pas un audit "
         "de sécurité manuel complet et ne saurait engager la responsabilité de ses auteurs. "
@@ -555,6 +623,128 @@ def _construire_markdown(infos: dict) -> str:
     ]
 
     return "\n".join(lignes)
+
+
+# ---------------------------------------------------------------------------
+# Bloc HTML — section Analyse IA
+# ---------------------------------------------------------------------------
+def _construire_html_ia(infos: dict) -> str:
+    """Génère le bloc HTML de la section 'Analyse par Intelligence Artificielle'."""
+    ai_verdict   = infos["ai_verdict"]
+    ai_confirmed = infos["ai_issues_confirmed"]
+    ai_potential = infos["ai_issues_potential"]
+
+    if not ai_verdict and not ai_confirmed and not ai_potential:
+        return '<p style="color:#64748b;font-style:italic;">Le modèle GNN n\'a pas été utilisé dans cette analyse.</p>'
+
+    parts = []
+
+    # ── Verdict global ──────────────────────────────────────────────────────
+    if ai_verdict:
+        v        = ai_verdict.get("verdict", "N/A").upper()
+        v_score  = ai_verdict.get("score")
+        v_expl   = ai_verdict.get("explanation", "")
+        v_color  = "#dc2626" if v == "VULNERABLE" else "#16a34a"
+        score_pct = f"{int(float(v_score) * 100)}%" if v_score is not None else "N/A"
+        parts.append(f"""
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;
+                border-radius:6px;padding:16px 20px;margin-bottom:20px;page-break-inside:avoid;">
+      <p style="margin:0 0 10px;font-size:11px;font-weight:700;text-transform:uppercase;
+                letter-spacing:.06em;color:#7c3aed;">Verdict global du modèle GNN</p>
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+        <div style="text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:{v_color};">{v}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Verdict</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:22px;font-weight:700;color:#7c3aed;">{score_pct}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Confiance</div>
+        </div>
+        <div style="flex:1;min-width:180px;">
+          <p style="margin:0;font-size:13px;color:#374151;line-height:1.55;">{v_expl}</p>
+        </div>
+      </div>
+    </div>""")
+
+    # ── Confirmés par GNN ───────────────────────────────────────────────────
+    if ai_confirmed:
+        rows = ""
+        for f in ai_confirmed:
+            sev   = f.get("severity", "low")
+            sev_fr = _SEV_FR.get(sev, sev.upper())
+            c     = _SEV_COLOR.get(sev, "#6b7280")
+            bg    = _SEV_BG.get(sev, "#f9fafb")
+            bd    = _SEV_BORDER.get(sev, "#d1d5db")
+            conf  = f.get("gnnConfidence", "—")
+            gnn_d = f.get("gnnDescription", "").replace("\n", "<br>")
+            rows += f"""
+        <div style="border:1px solid {bd};border-left:4px solid {c};background:#fff;
+                    border-radius:6px;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <span style="background:{bg};color:{c};border:1px solid {bd};padding:2px 8px;
+                         border-radius:4px;font-size:11px;font-weight:700;">{sev_fr}</span>
+            <span style="font-weight:600;color:#111827;font-size:13px;">{f.get('title','')}</span>
+            <span style="font-size:12px;color:#94a3b8;">Outil : {f.get('tool','').upper()} &nbsp;·&nbsp; Ligne : {f.get('line') or '—'}</span>
+            <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;
+                         padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">
+              ✓ GNN {conf}
+            </span>
+          </div>
+          {f'<p style="margin:0;font-size:12px;color:#374151;line-height:1.5;">{gnn_d}</p>' if gnn_d else ''}
+        </div>"""
+        parts.append(f"""
+    <div style="margin-bottom:20px;">
+      <p style="font-size:13px;font-weight:700;color:#111827;margin-bottom:4px;">
+        Vulnérabilités confirmées par le GNN
+        <span style="background:#dcfce7;color:#15803d;border-radius:9999px;
+                     padding:2px 10px;font-size:11px;margin-left:8px;">{len(ai_confirmed)}</span>
+      </p>
+      <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+        Ces findings ont été détectés par un outil <em>et</em> validés par le modèle GNN — niveau de confiance élevé.
+      </p>
+      {rows}
+    </div>""")
+
+    # ── POTENTIAL (GNN seul) ────────────────────────────────────────────────
+    if ai_potential:
+        rows = ""
+        for f in ai_potential:
+            sev   = f.get("severity", "low")
+            sev_fr = _SEV_FR.get(sev, sev.upper())
+            c     = _SEV_COLOR.get(sev, "#6b7280")
+            bg    = _SEV_BG.get(sev, "#f9fafb")
+            bd    = _SEV_BORDER.get(sev, "#d1d5db")
+            conf  = f.get("gnnConfidence", "—")
+            desc  = (f.get("gnnDescription") or f.get("description", "")).replace("\n", "<br>")
+            rows += f"""
+        <div style="border:1px solid {bd};border-left:4px solid {c};background:#fff;
+                    border-radius:6px;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <span style="background:{bg};color:{c};border:1px solid {bd};padding:2px 8px;
+                         border-radius:4px;font-size:11px;font-weight:700;">{sev_fr}</span>
+            <span style="font-weight:600;color:#111827;font-size:13px;">{f.get('title','')}</span>
+            <span style="background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;
+                         padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">
+              GNN {conf}
+            </span>
+          </div>
+          {f'<p style="margin:0;font-size:12px;color:#374151;line-height:1.5;">{desc}</p>' if desc else ''}
+        </div>"""
+        parts.append(f"""
+    <div style="margin-bottom:20px;">
+      <p style="font-size:13px;font-weight:700;color:#111827;margin-bottom:4px;">
+        Vulnérabilités détectées uniquement par le GNN — POTENTIAL
+        <span style="background:#ede9fe;color:#7c3aed;border-radius:9999px;
+                     padding:2px 10px;font-size:11px;margin-left:8px;">{len(ai_potential)}</span>
+      </p>
+      <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+        Ces findings sont issus exclusivement du modèle GNN. Aucun outil statique ou dynamique ne les a signalés.
+        Ils nécessitent une vérification manuelle avant d&apos;être considérés comme avérés.
+      </p>
+      {rows}
+    </div>""")
+
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +789,8 @@ def _construire_html(infos: dict) -> str:
         ("3", "Méthode de calcul du score"),
         ("4", "Outils utilisés"),
         ("5", "Tableau de synthèse"),
-        ("6", "Findings détaillés"),
+        ("6", "Analyse par Intelligence Artificielle"),
+        ("7", "Findings détaillés"),
     ]
     toc_rows = "".join(
         f'<tr><td style="padding:6px 0;color:#374151;font-size:13px;">'
@@ -1078,9 +1269,15 @@ def _construire_html(infos: dict) -> str:
   {synth_table}
 </div>
 
-<!-- ══════════════════════════════ 6. FINDINGS DÉTAILLÉS ════════════════════════════ -->
+<!-- ══════════════════════════════ 6. ANALYSE IA ════════════════════════════════════ -->
 <div class="section">
-  <h2><span class="section-num">6.</span>Findings détaillés</h2>
+  <h2><span class="section-num">6.</span>Analyse par Intelligence Artificielle</h2>
+  {_construire_html_ia(infos)}
+</div>
+
+<!-- ══════════════════════════════ 7. FINDINGS DÉTAILLÉS ════════════════════════════ -->
+<div class="section">
+  <h2><span class="section-num">7.</span>Findings détaillés</h2>
   {findings_html if findings_html else '<p style="color:#64748b;font-style:italic;">Aucune vulnérabilité détectée.</p>'}
 </div>
 

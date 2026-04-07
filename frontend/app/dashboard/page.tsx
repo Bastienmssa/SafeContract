@@ -25,8 +25,15 @@ import {
   Sparkles,
   Search,
   FileDown,
+  Trash2,
 } from "lucide-react";
 import { Contract, Issue, Severity, AiVerdict } from "./data";
+import {
+  ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell,
+  PieChart, Pie,
+  AreaChart, Area, CartesianGrid,
+} from "recharts";
 
 // ─── Aggregated report → Contract mapper ─────────────────────────────────────
 
@@ -1198,12 +1205,13 @@ export default function DashboardPage() {
     router.push("/");
   }
 
-  async function downloadReport(format: "pdf" | "markdown") {
-    if (!selectedContract?.id || isScanning || downloadingReport !== null) return;
+  async function downloadReport(format: "pdf" | "markdown", contract?: Contract) {
+    const target = contract ?? selectedContract;
+    if (!target?.id || isScanning || downloadingReport !== null) return;
     setDownloadingReport(format);
     setDownloadError(null);
     try {
-      const res = await fetch(`/api/analyses/${selectedContract.id}/rapport?format=${format}`);
+      const res = await fetch(`/api/analyses/${target.id}/rapport?format=${format}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({ detail: `Erreur HTTP ${res.status}` }));
         throw new Error(body.detail ?? `Erreur ${res.status}`);
@@ -1212,16 +1220,29 @@ export default function DashboardPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `rapport_${selectedContract.name.replace(".sol", "").replace(".vy", "")}.${format === "pdf" ? "pdf" : "md"}`;
+      a.download = `rapport_${target.name.replace(".sol", "").replace(".vy", "")}.${format === "pdf" ? "pdf" : "md"}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      // Révoquer après un délai pour laisser le navigateur démarrer le téléchargement
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     } catch (err) {
       setDownloadError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
       setDownloadingReport(null);
+    }
+  }
+
+  async function deleteAnalysis(contract: Contract) {
+    if (!contract.id) return;
+    if (!window.confirm(`Supprimer l'analyse de "${contract.name}" ? Cette action est irréversible.`)) return;
+    try {
+      const res = await fetch(`/api/analyses/${contract.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      if (selectedContract?.id === contract.id) setSelectedContract(null);
+      await refreshContracts();
+      setToast({ type: "success", msg: `Analyse "${contract.name}" supprimée`, key: Date.now() });
+    } catch {
+      setToast({ type: "error", msg: "Impossible de supprimer l'analyse", key: Date.now() });
     }
   }
 
@@ -1238,34 +1259,34 @@ export default function DashboardPage() {
   const mediums = selectedContract?.issues.filter((i) => i.severity === "medium").length ?? 0;
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#091628" }}>
-      {/* Sidebar */}
-      <aside className="w-56 shrink-0 flex flex-col" style={{ background: "#0d1e35", borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-        <div className="h-16 flex items-center px-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/images/SafeContract-Logo.png" alt="SafeContract" className="h-7 w-auto" />
-            <span
-              className="font-bold text-sm tracking-tight"
-              style={{ background: "linear-gradient(135deg, #2cbe88 0%, #152d5b 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}
-            >
-              SafeContract
-            </span>
-          </Link>
-        </div>
+    <div className="min-h-screen flex flex-col" style={{ background: "#091628" }}>
+      {/* ── Topnav ── */}
+      <header className="h-14 shrink-0 flex items-center gap-0 px-6" style={{ background: "#0d1e35", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2 mr-8 shrink-0">
+          <img src="/images/SafeContract-Logo.png" alt="SafeContract" className="h-7 w-auto" />
+          <span
+            className="font-bold text-sm tracking-tight hidden sm:block"
+            style={{ background: "linear-gradient(135deg, #2cbe88 0%, #152d5b 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}
+          >
+            SafeContract
+          </span>
+        </Link>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        {/* Nav items */}
+        <nav className="flex items-center gap-1">
           {NAV.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeSection === id
                   ? "bg-primary-500/20 text-primary-400"
                   : "text-white/50 hover:bg-white/5 hover:text-white"
               }`}
             >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="flex-1 text-left">{label}</span>
+              <Icon className="w-3.5 h-3.5 shrink-0" />
+              <span>{label}</span>
               {id === "scan" && isScanning && (
                 <Loader2 className="w-3 h-3 animate-spin text-primary-500 shrink-0" />
               )}
@@ -1273,173 +1294,254 @@ export default function DashboardPage() {
           ))}
         </nav>
 
-        <div className="px-3 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="flex-1" />
+
+        {/* Right side */}
+        <div className="flex items-center gap-3">
+          {isScanning && activeSection !== "scan" && (
+            <button
+              onClick={() => setActiveSection("scan")}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-400 transition-colors"
+              style={{ background: "rgba(44,190,136,0.1)", border: "1px solid rgba(44,190,136,0.2)" }}
+            >
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Analyse en cours…
+            </button>
+          )}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold">A</div>
+            <span className="text-sm font-medium text-white/70 hidden sm:block">admin</span>
+          </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-white/50 hover:bg-white/5 hover:text-white transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-white/40 hover:bg-white/5 hover:text-white transition-colors"
+            title="Déconnexion"
           >
-            <LogOut className="w-4 h-4 shrink-0" />
-            Déconnexion
+            <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
-      </aside>
+      </header>
 
-      {/* Main */}
-      <main className="flex-1 min-w-0 flex flex-col">
-        {/* Top bar */}
-        <header className="h-16 flex items-center justify-between px-6 shrink-0" style={{ background: "#0d1e35", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <h1 className="text-base font-semibold text-white">
-            {NAV.find((n) => n.id === activeSection)?.label}
-          </h1>
-          <div className="flex items-center gap-3">
-            {isScanning && activeSection !== "scan" && (
-              <button
-                onClick={() => setActiveSection("scan")}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
-              >
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Analyse en cours…
-              </button>
-            )}
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold">A</div>
-              <span className="text-sm font-medium text-white/70">admin</span>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-6">
+      {/* ── Contenu ── */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="p-6">
 
           {/* ── Vue d'ensemble ───────────────────────────────────────────── */}
-          {activeSection === "overview" && !selectedContract && (
-            <div className="max-w-5xl mx-auto flex flex-col items-center justify-center gap-4 py-20 text-center">
-              <ShieldAlert className="w-12 h-12 text-white/30" />
-              <p className="text-white/50 text-sm">Aucune analyse dans la base de données.<br />Rendez-vous dans <strong>Nouvelle analyse</strong> pour scanner votre premier contrat.</p>
-            </div>
-          )}
-          {activeSection === "overview" && selectedContract && (
-            <div className="space-y-6 max-w-5xl mx-auto">
+          {activeSection === "overview" && (() => {
+            if (contracts.length === 0) {
+              return (
+                <div className="max-w-5xl mx-auto flex flex-col items-center justify-center gap-4 py-24 text-center">
+                  <ShieldAlert className="w-12 h-12 text-white/20" />
+                  <p className="text-white/40 text-sm">Aucune analyse dans la base de données.<br />Rendez-vous dans <strong className="text-white/60">Nouvelle analyse</strong> pour scanner votre premier contrat.</p>
+                </div>
+              );
+            }
 
-              {/* Health Score + stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Big health card */}
-                <div className="md:col-span-1 rounded-xl p-6 flex flex-col items-center gap-3" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <p className="text-xs font-semibold text-white/50 uppercase tracking-wide">Health Score</p>
-                  <HealthGauge score={selectedContract.score} />
-                  <span className={`text-sm font-semibold ${scoreText}`}>{scoreLabel(selectedContract.score)}</span>
-                  <p className="text-xs text-white/40 text-center">{selectedContract.name}</p>
-                  {/* Boutons rapport */}
-                  {selectedContract.id && (
-                    <div className="flex flex-col gap-1.5 mt-1 w-full">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => downloadReport("pdf")}
-                          disabled={downloadingReport !== null || isScanning}
-                          title={isScanning ? "Analyse en cours, veuillez patienter" : undefined}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-md transition-colors"
-                        >
-                          {downloadingReport === "pdf" ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <FileDown className="w-3 h-3" />
-                          )}
-                          PDF
-                        </button>
-                        <button
-                          onClick={() => downloadReport("markdown")}
-                          disabled={downloadingReport !== null || isScanning}
-                          title={isScanning ? "Analyse en cours, veuillez patienter" : undefined}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/70 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition-colors" style={{ background: "rgba(255,255,255,0.08)" }}
-                        >
-                          {downloadingReport === "markdown" ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <FileDown className="w-3 h-3" />
-                          )}
-                          Markdown
-                        </button>
+            // ── données calculées ──
+            const totalCriticals = contracts.reduce((s, c) => s + c.issues.filter(i => i.severity === "critical").length, 0);
+            const totalMediums   = contracts.reduce((s, c) => s + c.issues.filter(i => i.severity === "medium").length, 0);
+            const totalLows      = contracts.reduce((s, c) => s + c.issues.filter(i => i.severity === "low").length, 0);
+            const totalIssues    = totalCriticals + totalMediums + totalLows;
+            const avgScore       = Math.round(contracts.reduce((s, c) => s + c.score, 0) / contracts.length);
+            const safeCount      = contracts.filter(c => c.score >= 80).length;
+            const riskyCount     = contracts.filter(c => c.score < 50).length;
+
+            // Données bar chart — scores par contrat
+            const barData = [...contracts]
+              .sort((a, b) => b.score - a.score)
+              .map(c => ({
+                name: c.name.replace(/\.(sol|vy)$/, ""),
+                score: c.score,
+                fill: c.score >= 80 ? "#2cbe88" : c.score >= 50 ? "#f59e0b" : "#ef4444",
+              }));
+
+            // Données donut — répartition des sévérités
+            const donutData = [
+              { name: "Critique", value: totalCriticals, fill: "#ef4444" },
+              { name: "Moyen",    value: totalMediums,   fill: "#f59e0b" },
+              { name: "Faible",   value: totalLows,      fill: "#3b82f6" },
+            ].filter(d => d.value > 0);
+
+            // Données timeline — toutes les analyses de tous les contrats, triées par date
+            const timelineData = contracts
+              .flatMap(c => c.timeline.map(t => ({ date: t.date, rawDate: t.rawDate, score: t.score, name: c.name })))
+              .sort((a, b) => new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime())
+              .map((t, i) => ({ ...t, index: i }));
+
+            const tooltipStyle = {
+              backgroundColor: "#0f2040",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              color: "#fff",
+              fontSize: 12,
+            };
+
+            return (
+              <div className="max-w-6xl mx-auto space-y-6">
+
+                {/* ── KPIs ── */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: "Contrats analysés", value: contracts.length, icon: FileCode2, color: "#2cbe88", bg: "rgba(44,190,136,0.1)" },
+                    { label: "Score moyen",        value: `${avgScore}/100`, icon: ShieldCheck, color: avgScore >= 80 ? "#2cbe88" : avgScore >= 50 ? "#f59e0b" : "#ef4444", bg: "rgba(255,255,255,0.05)" },
+                    { label: "Vulnérabilités critiques", value: totalCriticals, icon: ShieldX, color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
+                    { label: "Contrats sains",     value: `${safeCount}/${contracts.length}`, icon: ShieldCheck, color: "#2cbe88", bg: "rgba(44,190,136,0.07)" },
+                  ].map(({ label, value, icon: Icon, color, bg }) => (
+                    <div key={label} className="rounded-xl p-5 flex flex-col gap-3" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: bg }}>
+                        <Icon className="w-4 h-4" style={{ color }} />
                       </div>
-                      {downloadError && (
-                        <p className="text-xs text-red-500 text-center">{downloadError}</p>
-                      )}
+                      <div>
+                        <div className="text-2xl font-bold text-white">{value}</div>
+                        <div className="text-xs text-white/45 mt-0.5">{label}</div>
+                      </div>
                     </div>
-                  )}
-                </div>
-
-                {/* Stats */}
-                <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <ShieldX className="w-5 h-5 text-red-500 mb-1" />
-                    <span className="text-2xl font-bold text-white">{criticals}</span>
-                    <span className="text-xs text-white/50">Vulnérabilité{criticals !== 1 ? "s" : ""} critique{criticals !== 1 ? "s" : ""}</span>
-                  </div>
-                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <AlertTriangle className="w-5 h-5 text-amber-500 mb-1" />
-                    <span className="text-2xl font-bold text-white">{mediums}</span>
-                    <span className="text-xs text-white/50">Risque{mediums !== 1 ? "s" : ""} modéré{mediums !== 1 ? "s" : ""}</span>
-                  </div>
-                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <AlertCircle className="w-5 h-5 text-blue-500 mb-1" />
-                    <span className="text-2xl font-bold text-white">{selectedContract.issues.length}</span>
-                    <span className="text-xs text-white/50">Issues totales</span>
-                  </div>
-                  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <ShieldCheck className="w-5 h-5 text-emerald-500 mb-1" />
-                    <span className="text-2xl font-bold text-white">{contracts.filter((c) => c.score >= 80).length}</span>
-                    <span className="text-xs text-white/50">Contrats sains</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Timeline */}
-              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <SecurityTimeline timeline={selectedContract.timeline} />
-              </div>
-
-              {/* Contract selector */}
-              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <p className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-4">Contrat analysé</p>
-                <div className="space-y-2">
-                  {contracts.map((c) => (
-                    <ContractCard
-                      key={c.id}
-                      contract={c}
-                      selected={c.id === selectedContract.id}
-                      onClick={() => setSelectedContract(c)}
-                    />
                   ))}
                 </div>
+
+                {/* ── Bar chart + Donut ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+
+                  {/* Bar chart — score par contrat */}
+                  <div className="lg:col-span-3 rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <p className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-5">Score de sécurité par contrat</p>
+                    <ResponsiveContainer width="100%" height={Math.max(180, barData.length * 48)}>
+                      <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 32, top: 0, bottom: 0 }}>
+                        <XAxis type="number" domain={[0, 100]} tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="name" width={140} tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 12 }} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                          contentStyle={tooltipStyle}
+                          formatter={(v: unknown) => [`${v}/100`, "Score"]}
+                        />
+                        <Bar dataKey="score" radius={[0, 6, 6, 0]} maxBarSize={22}>
+                          {barData.map((entry, i) => (
+                            <Cell key={i} fill={entry.fill} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Donut — répartition des sévérités */}
+                  <div className="lg:col-span-2 rounded-xl p-6 flex flex-col" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <p className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-4">Répartition des vulnérabilités</p>
+                    {totalIssues === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                        <ShieldCheck className="w-10 h-10 text-primary-500/60" />
+                        <p className="text-sm text-white/40">Aucune vulnérabilité détectée</p>
+                      </div>
+                    ) : (
+                      <>
+                        <ResponsiveContainer width="100%" height={170}>
+                          <PieChart>
+                            <Pie
+                              data={donutData}
+                              cx="50%" cy="50%"
+                              innerRadius={52} outerRadius={78}
+                              paddingAngle={3}
+                              dataKey="value"
+                              stroke="none"
+                            >
+                              {donutData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                            </Pie>
+                            <Tooltip contentStyle={tooltipStyle} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="mt-3 space-y-2">
+                          {donutData.map(d => (
+                            <div key={d.name} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.fill }} />
+                                <span className="text-xs text-white/60">{d.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-white">{d.value}</span>
+                                <span className="text-xs text-white/35">{Math.round(d.value / totalIssues * 100)}%</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Timeline globale ── */}
+                {timelineData.length > 1 && (
+                  <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <p className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-5">Évolution des scores dans le temps</p>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <AreaChart data={timelineData} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#2cbe88" stopOpacity={0.25} />
+                            <stop offset="95%" stopColor="#2cbe88" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="date" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[0, 100]} tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} width={32} />
+                        <Tooltip
+                          contentStyle={tooltipStyle}
+                          formatter={(v: unknown) => [`${v}/100`, "Score"]}
+                        />
+                        <Area type="monotone" dataKey="score" stroke="#2cbe88" strokeWidth={2} fill="url(#scoreGrad)" dot={{ fill: "#2cbe88", r: 3, strokeWidth: 0 }} activeDot={{ r: 5, fill: "#2cbe88" }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* ── Liste des contrats ── */}
+                <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-semibold text-white/50 uppercase tracking-widest">Contrats</p>
+                    <div className="flex items-center gap-3 text-xs text-white/35">
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{safeCount} sain{safeCount > 1 ? "s" : ""}</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />{riskyCount} critique{riskyCount > 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {contracts.map((c) => (
+                      <ContractCard
+                        key={c.id}
+                        contract={c}
+                        selected={c.id === selectedContract?.id}
+                        onClick={() => { setSelectedContract(c); setActiveSection("diagnostic"); }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Nouvelle analyse — toujours monté pour conserver l'état du formulaire ── */}
           <div className={activeSection !== "scan" ? "hidden" : ""}>
-            <div className="max-w-2xl mx-auto space-y-6">
+            <div className="max-w-2xl mx-auto space-y-5">
 
               {/* Bannière scan en cours */}
               {isScanning && (
-                <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-blue-200 bg-blue-50">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                <div className="flex items-center gap-4 px-5 py-4 rounded-xl" style={{ background: "rgba(44,190,136,0.07)", border: "1px solid rgba(44,190,136,0.2)" }}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "rgba(44,190,136,0.15)" }}>
+                    <Loader2 className="w-4 h-4 animate-spin text-primary-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-blue-900">Analyse en cours…</p>
-                    <p className="text-sm text-blue-700 truncate">{scanningFileName}</p>
-                    <p className="text-xs text-blue-400 mt-0.5">
+                    <p className="text-sm font-semibold text-white">Analyse en cours…</p>
+                    <p className="text-sm text-primary-400 truncate">{scanningFileName}</p>
+                    <p className="text-xs text-white/40 mt-0.5">
                       Vous pouvez naviguer librement — l&apos;analyse se poursuit en arrière-plan.
                     </p>
                   </div>
                 </div>
               )}
 
-              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div className="mb-6">
-                  <h2 className="text-base font-semibold text-white">Analyser un contrat</h2>
-                  <p className="text-sm text-white/50 mt-1">
-                    Importez un fichier <code className="font-mono text-primary-500">.sol</code> ou collez votre code. Le résultat sera ajouté à vos analyses.
-                  </p>
-                </div>
+              <div>
+                <h2 className="text-base font-semibold text-white mb-1">Analyser un contrat</h2>
+                <p className="text-sm text-white/50 mb-5">
+                  Importez un fichier <code className="font-mono text-primary-500">.sol</code> ou collez votre code. Le résultat sera ajouté à vos analyses.
+                </p>
                 <AnalyseScan
                   onResult={handleScanResult}
                   isGloballyScanning={isScanning}
@@ -1460,68 +1562,110 @@ export default function DashboardPage() {
             </div>
           )}
           {activeSection === "diagnostic" && selectedContract && (
-            <div className="max-w-5xl mx-auto space-y-4">
-              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                {/* Contract picker inline */}
-                <div className="flex items-center gap-2 flex-wrap mb-5">
-                  {contracts.map((c) => {
-                    const { bg } = scoreColor(c.score);
-                    return (
-                      <button
-                        key={c.id}
-                        onClick={() => setSelectedContract(c)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                          c.id === selectedContract.id
-                            ? "border-primary-500/50 text-primary-400"
-                            : "text-white/60 hover:border-white/20 hover:text-white"
-                        }`}
-                        style={{ background: c.id === selectedContract.id ? "rgba(44,190,136,0.15)" : "rgba(255,255,255,0.05)", borderColor: c.id === selectedContract.id ? undefined : "rgba(255,255,255,0.1)" }}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${bg}`} />
-                        {c.name}
-                      </button>
-                    );
-                  })}
-                </div>
-                <CodeDiagnostic contract={selectedContract} />
+            <div className="max-w-5xl mx-auto">
+              {/* Contract picker inline */}
+              <div className="flex items-center gap-2 flex-wrap mb-5">
+                {contracts.map((c) => {
+                  const { bg } = scoreColor(c.score);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedContract(c)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                        c.id === selectedContract.id
+                          ? "border-primary-500/50 text-primary-400"
+                          : "text-white/60 hover:border-white/20 hover:text-white"
+                      }`}
+                      style={{ background: c.id === selectedContract.id ? "rgba(44,190,136,0.15)" : "rgba(255,255,255,0.05)", borderColor: c.id === selectedContract.id ? undefined : "rgba(255,255,255,0.1)" }}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${bg}`} />
+                      {c.name}
+                    </button>
+                  );
+                })}
               </div>
+              <CodeDiagnostic contract={selectedContract} />
             </div>
           )}
 
           {/* ── Analyses / Historique ───────────────────────────────────── */}
           {activeSection === "analyses" && (
-            <div className="max-w-5xl mx-auto space-y-6">
+            <div className="max-w-5xl mx-auto space-y-8">
               {/* Contracts */}
-              <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <p className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-4">Contrats pré-stockés</p>
-                <div className="space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-4">Contrats analysés</p>
+                <div className="space-y-2">
                   {contracts.map((c) => {
                     const { text, ring } = scoreColor(c.score);
                     return (
-                      <button
+                      <div
                         key={c.id}
-                        onClick={() => { setSelectedContract(c); setActiveSection("diagnostic"); }}
-                        className="w-full text-left flex items-center gap-4 px-4 py-4 rounded-xl transition-colors hover:bg-white/5"
-                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                        className="flex items-center gap-3 px-4 py-3.5 rounded-xl transition-colors"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
                       >
-                        <div className="w-12 h-12 rounded-full border-4 flex items-center justify-center shrink-0" style={{ borderColor: ring }}>
-                          <span className={`text-sm font-bold ${text}`}>{c.score}</span>
+                        {/* Score ring */}
+                        <div className="w-10 h-10 rounded-full border-[3px] flex items-center justify-center shrink-0" style={{ borderColor: ring }}>
+                          <span className={`text-xs font-bold ${text}`}>{c.score}</span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-semibold text-white">{c.name}</p>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.score >= 80 ? "bg-emerald-50 text-emerald-600" : c.score >= 50 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"}`}>
+
+                        {/* Info — cliquable pour aller dans Diagnostic */}
+                        <button
+                          className="flex-1 min-w-0 text-left"
+                          onClick={() => { setSelectedContract(c); setActiveSection("diagnostic"); }}
+                        >
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="text-sm font-semibold text-white truncate">{c.name}</p>
+                            <span
+                              className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
+                              style={c.score >= 80
+                                ? { background: "rgba(44,190,136,0.15)", color: "#2cbe88" }
+                                : c.score >= 50
+                                ? { background: "rgba(245,158,11,0.15)", color: "#fbbf24" }
+                                : { background: "rgba(239,68,68,0.15)", color: "#f87171" }}
+                            >
                               {scoreLabel(c.score)}
                             </span>
                           </div>
                           <p className="text-xs text-white/40">
-                            {c.issues.length} issue{c.issues.length !== 1 ? "s" : ""} · Dernière analyse le {c.lastAnalyzed}
+                            {c.issues.length} issue{c.issues.length !== 1 ? "s" : ""} · {c.lastAnalyzed}
                           </p>
+                        </button>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {c.id && (
+                            <>
+                              <button
+                                onClick={() => downloadReport("pdf", c)}
+                                disabled={downloadingReport !== null || isScanning}
+                                title="Télécharger le rapport PDF"
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white transition-colors hover:bg-primary-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                style={{ background: "rgba(44,190,136,0.1)", color: "#2cbe88" }}
+                              >
+                                {downloadingReport === "pdf" ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileDown className="w-3 h-3" />}
+                                PDF
+                              </button>
+                              <button
+                                onClick={() => downloadReport("markdown", c)}
+                                disabled={downloadingReport !== null || isScanning}
+                                title="Télécharger le rapport Markdown"
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}
+                              >
+                                {downloadingReport === "markdown" ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileDown className="w-3 h-3" />}
+                                MD
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => deleteAnalysis(c)}
+                            title="Supprimer cette analyse"
+                            className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <div className="shrink-0 text-right">
-                          <SecurityTimeline timeline={c.timeline} />
-                        </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1543,9 +1687,9 @@ export default function DashboardPage() {
                 const page = Math.min(histPage, totalPages);
                 const rows = allRows.slice((page - 1) * HIST_PER_PAGE, page * HIST_PER_PAGE);
                 return (
-                  <div className="rounded-xl p-6" style={{ background: "#0f2040", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div>
                     <div className="flex items-center justify-between mb-4">
-                      <p className="text-xs font-semibold text-white/50 uppercase tracking-wide">Historique des analyses</p>
+                      <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">Historique des analyses</p>
                       <p className="text-xs text-white/40">{allRows.length} analyse{allRows.length !== 1 ? "s" : ""}</p>
                     </div>
                     <div className="overflow-x-auto">
@@ -1562,16 +1706,21 @@ export default function DashboardPage() {
                         <tbody>
                           {rows.map((row) => (
                             <tr key={row.key} className="hover:bg-white/5 transition-colors" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                              <td className="py-2.5 px-3 font-medium text-white">{row.contract}</td>
-                              <td className="py-2.5 px-3 text-white/50 text-xs">{row.date}</td>
-                              <td className="py-2.5 px-3">
+                              <td className="py-3 px-3 font-medium text-white">{row.contract}</td>
+                              <td className="py-3 px-3 text-white/50 text-xs">{row.date}</td>
+                              <td className="py-3 px-3">
                                 <span className={`font-semibold ${scoreColor(row.score).text}`}>{row.score}/100</span>
                               </td>
-                              <td className="py-2.5 px-3 text-white/60">{row.issues}</td>
-                              <td className="py-2.5 px-3">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  row.score >= 80 ? "bg-emerald-50 text-emerald-600" : row.score >= 50 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
-                                }`}>
+                              <td className="py-3 px-3 text-white/60">{row.issues}</td>
+                              <td className="py-3 px-3">
+                                <span
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                                  style={row.score >= 80
+                                    ? { background: "rgba(44,190,136,0.15)", color: "#2cbe88" }
+                                    : row.score >= 50
+                                    ? { background: "rgba(245,158,11,0.15)", color: "#fbbf24" }
+                                    : { background: "rgba(239,68,68,0.15)", color: "#f87171" }}
+                                >
                                   {scoreLabel(row.score)}
                                 </span>
                               </td>
@@ -1581,7 +1730,7 @@ export default function DashboardPage() {
                       </table>
                     </div>
                     {totalPages > 1 && (
-                      <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                      <div className="flex items-center justify-between mt-5 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                         <button
                           onClick={() => setHistPage((p) => Math.max(1, p - 1))}
                           disabled={page <= 1}
@@ -1610,4 +1759,5 @@ export default function DashboardPage() {
       {toast && <Toast key={toast.key} data={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
+
 }

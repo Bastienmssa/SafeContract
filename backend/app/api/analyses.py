@@ -49,3 +49,21 @@ async def get_analysis(analysis_id: str):
     if not doc:
         raise HTTPException(status_code=404, detail="Analyse non trouvée")
     return _serialize(doc)
+
+
+@router.delete("/analyses/{analysis_id}")
+async def delete_analysis(analysis_id: str):
+    db = get_db()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Base de données non disponible")
+    try:
+        oid = ObjectId(analysis_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    try:
+        result = await db.analyses.delete_one({"_id": oid})
+    except Exception:
+        raise HTTPException(status_code=503, detail="Base de données non disponible")
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Analyse non trouvée")
+    return {"deleted": True}
