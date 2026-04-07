@@ -65,7 +65,7 @@ export function HeroSection() {
         </p>
 
         {/* CTA buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4" style={{ marginTop: "300px" }}>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4" style={{ marginTop: "200px" }}>
           <Link
             href="#analyse"
             className="w-full sm:w-auto px-7 py-3 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90 hover:scale-105"

@@ -1,0 +1,837 @@
+================================================================================
+PROMPT POUR CLAUDE OPUS 4.6 — RAPPORT TECHNIQUE COMPLET SAFECONTRACT
+================================================================================
+
+Tu es un expert en rédaction de rapports techniques. Ta mission est de produire
+un rapport professionnel, exhaustif et pédagogique de MINIMUM 20 pages sur le
+projet SafeContract. Ce rapport est destiné à un jury d'évaluation académique
+(école d'ingénieurs ESME) et doit démontrer la profondeur technique du projet,
+les choix d'architecture, les défis relevés et la valeur apportée.
+
+Le rapport doit être rédigé en français, avec un niveau de détail élevé, des
+explications techniques précises, des schémas textuels ASCII quand pertinent,
+et une structure claire avec numérotation des sections. Utilise du Markdown.
+
+════════════════════════════════════════════════════════════════════════════════
+CONTEXTE DU PROJET
+════════════════════════════════════════════════════════════════════════════════
+
+SafeContract est une plateforme d'audit de sécurité automatisée pour les smart
+contracts Ethereum (Solidity / Vyper), développée dans le cadre d'un projet
+d'école d'ingénieurs à l'ESME par trois étudiants :
+
+- Bastien (développement principal frontend + intégration backend + GNN)
+- Géraud (développement backend + outils d'analyse)
+- Pierre-Henri (infrastructure, déploiement, API Gateway)
+
+L'objectif est de démocratiser l'audit de sécurité des smart contracts, un
+domaine habituellement réservé à des cabinets spécialisés coûteux (30 000 € à
+200 000 € par audit). SafeContract offre une analyse automatisée multicouche
+combinant outils open-source et intelligence artificielle.
+
+Contexte marché :
+- En 2022-2023, plus de 3,8 milliards de dollars ont été volés via des
+  vulnérabilités de smart contracts (reentrancy, flash loans, integer overflow).
+- Le protocole The DAO (2016) : 60 M$ volés par reentrancy.
+- Poly Network (2021) : 600 M$ volés.
+- Ronin Bridge (2022) : 625 M$ volés.
+- La majorité des projets DeFi ne réalisent pas d'audit avant déploiement.
+
+════════════════════════════════════════════════════════════════════════════════
+ARCHITECTURE GÉNÉRALE
+════════════════════════════════════════════════════════════════════════════════
+
+SafeContract est composé de quatre couches distinctes :
+
+1. FRONTEND — Next.js 14 (App Router, TypeScript, Tailwind CSS)
+   - Site marketing + dashboard d'analyse
+   - Déployé sur port 3000
+   - Thème sombre (#091628), police Satoshi, couleur primaire verte #2cbe88
+   - Fond animé WebGL (aurora boréale) sur la page d'accueil
+
+2. API GATEWAY — Zuplo (TypeScript, OpenAPI 3.1.0)
+   - Déployé sur port 9000
+   - Proxy sécurisé entre le frontend et le backend
+   - Routes définies via config/routes.oas.json (spec-first)
+   - Gère le rate limiting, l'authentification future et la documentation
+
+3. BACKEND — Python FastAPI
+   - Déployé sur port 8000
+   - Pipeline d'analyse multi-outils en parallèle
+   - Modèle GNN propriétaire (Graph Neural Network)
+   - Persistance MongoDB (driver async Motor)
+   - Génération de rapports PDF et Markdown (WeasyPrint)
+
+4. CORE — Rust (stub, non encore implémenté)
+   - Prévu pour les analyses de performance critique
+
+Flux de données :
+```
+Browser
+  └─→ Next.js frontend (:3000)
+        └─→ Next.js API Routes (/api/*)  ←→  Python Backend (:8000)
+        └─→ Zuplo Gateway (:9000)        ←→  Python Backend (:8000)
+                                         ←→  Ethereum RPC node
+Caddy reverse proxy (HTTPS externe) → Zuplo → Next.js
+```
+
+Infrastructure de production :
+- Serveur Linux (VPS)
+- IP : 159.65.192.47
+- PM2 pour la gestion des processus (auto-restart, logs)
+- Caddy comme reverse proxy HTTPS (certificats automatiques Let's Encrypt)
+- MongoDB local sur localhost:27017
+
+PM2 processes :
+- safe-contract-front : npm --prefix frontend run start
+- safe-contract-back  : uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+════════════════════════════════════════════════════════════════════════════════
+FRONTEND — DÉTAIL TECHNIQUE COMPLET
+════════════════════════════════════════════════════════════════════════════════
+
+STACK :
+- Next.js 14 avec App Router (Server + Client Components)
+- TypeScript strict
+- Tailwind CSS v3 avec configuration personnalisée
+- Lucide React pour les icônes
+- Police Satoshi (Fontshare CDN) avec fallback Inter (next/font/google)
+- Bibliothèque ogl pour le rendu WebGL
+
+PAGES :
+1. / (Landing page)
+   - Composants : Navbar + HeroSection + ProblemSolution + VisualHook + Footer
+   - HeroSection : fond WebGL SoftAurora, titre "Safe Contract" en dégradé vert,
+     tagline, deux CTA (Démarrer l'analyse / Voir la démo)
+   - ProblemSolution : 3 features (Sécurisation, Détection, Rapports)
+   - VisualHook : mock du dashboard avec carte score circulaire SVG, liste d'issues,
+     bannière GNN — tout fictif pour démonstration
+
+2. /about
+   - Présentation du projet, stack technique, équipe (3 membres)
+   - Cartes sombres pour stack et équipe
+
+3. /connexion
+   - Login avec hardcoding demo (admin/admin → localStorage sc_auth)
+   - 3 boutons OAuth fictifs (GitHub, Google, SSO)
+   - Inputs dark theme, bouton submit vert
+
+4. /free-analyse
+   - Analyse publique sans compte
+   - Upload .sol ou textarea Solidity
+   - Appel à POST /api/scan
+   - Affichage JSON brut du résultat
+
+5. /dashboard (page principale, 1400+ lignes)
+   - Protégé : vérifie localStorage sc_auth
+   - 4 onglets via sidebar :
+     a) Vue d'ensemble : liste des contrats analysés (ContractCard), timeline
+        des scores, HealthGauge circulaire SVG
+     b) Nouvelle analyse : sélecteur de packages (Statique/Dynamique), checkbox IA,
+        upload ou textarea, scan en temps réel avec polling SSE
+     c) Code & Diagnostic : CodeDiagnostic avec code annoté + heatmap + findings
+        par outil avec animation slide-down
+     d) Analyses : historique paginé (10/page), tableau filtrable
+
+COMPOSANT SoftAurora (WebGL) :
+- Utilise la bibliothèque ogl (minimaliste WebGL)
+- Shader GLSL custom avec bruit de Perlin multi-octaves
+- Rendu d'un faisceau aurora animé avec interpolation de couleur
+- Props configurables : color1, color2, brightness, speed, scale, bandHeight,
+  bandSpread, noiseFrequency, noiseAmplitude, octaveDecay, layerOffset,
+  colorSpeed, enableMouseInteraction, mouseInfluence
+- Chargé dynamiquement avec next/dynamic + ssr: false (SSR incompatible WebGL)
+
+COMPOSANT CodeDiagnostic :
+- Affiche le code source en tableau avec numéros de ligne
+- Lignes vulnérables surlignées selon la sévérité (rouge/orange/bleu)
+- Heatmap minimap de 5px de large sur la droite (points colorés proportionnels)
+- Groupage des findings par outil (Mythril, Slither, etc.)
+- Clic sur un finding → panneau de détail animé qui glisse depuis derrière la
+  ligne cliquée (max-height transition + z-index layering)
+- SeverityBadge en thème sombre (backgrounds semi-transparents)
+
+ARCHITECTURE DES ROUTES API NEXT.JS (proxy backend) :
+- POST /api/scan → BACKEND_URL/scan (multipart/form-data)
+- GET /api/analyses → BACKEND_URL/analyses
+- GET /api/analyses/[id] → BACKEND_URL/analyses/{id}
+- GET /api/analyses/[id]/rapport → BACKEND_URL/analyses/{id}/rapport?format=pdf|markdown
+Toutes les routes lisent la réponse en texte avant de parser JSON pour éviter
+les crashes sur réponses HTML (erreurs Nginx/Zuplo).
+
+TYPES TYPESCRIPT (data.ts) :
+```typescript
+type Severity = "critical" | "medium" | "low";
+interface Issue {
+  line: number;
+  severity: Severity;
+  title: string;
+  desc: string;
+  swcId?: string;
+  tool?: string;
+  confirmedByGnn?: boolean;
+  gnnConfidence?: string;
+  gnnDescription?: string;
+}
+interface AiVerdict {
+  verdict: "vulnerable" | "safe";
+  score: number;
+  explanation: string;
+}
+interface Contract {
+  id: string;
+  name: string;
+  score: number;
+  issues: Issue[];
+  code: string;
+  lastAnalyzed: string;
+  timeline: { date: string; rawDate: string; score: number }[];
+  toolsUsed?: string[];
+  toolsErrors?: Record<string, string>;
+  toolsVersions?: Record<string, string>;
+  aiVerdict?: AiVerdict;
+}
+```
+
+NOMMAGE AUTOMATIQUE DES CONTRATS COLLÉS :
+Regex : /^\s*contract\s+(\w+)/m
+Extrait le nom depuis la déclaration `contract NomContrat {` (début de ligne
+uniquement, évite de matcher les commentaires comme `// Define contract name`).
+
+════════════════════════════════════════════════════════════════════════════════
+API GATEWAY ZUPLO — DÉTAIL
+════════════════════════════════════════════════════════════════════════════════
+
+Zuplo est une plateforme API Gateway cloud-native, spec-first (OpenAPI 3.1.0).
+Toutes les routes sont définies dans config/routes.oas.json.
+
+Routes actives :
+- POST /scan         → proxy → http://127.0.0.1:8000/scan
+- GET /analyses      → proxy → http://127.0.0.1:8000/analyses
+- GET /analyses/:id  → proxy → http://127.0.0.1:8000/analyses/{id}
+- POST /rpc          → proxy → http://159.65.192.47.nip.io:8545 (Ethereum RPC)
+- /*                 → proxy → http://159.65.192.47.nip.io:3000 (Next.js catch-all)
+
+Avantages de Zuplo dans ce projet :
+1. Documentation API auto-générée (OpenAPI Playground)
+2. Rate limiting configurable par route
+3. Authentification pluggable (JWT, API keys) pour une v2
+4. Découplage frontend/backend (le frontend ne connaît pas l'adresse du backend)
+5. Observabilité centralisée des appels
+
+Défis rencontrés avec Zuplo :
+- Les réponses multipart sont proxifiées sans modification du Content-Type
+- Les erreurs du backend (HTML de debug FastAPI) devaient être interceptées côté
+  frontend via lecture en texte avant parsing JSON
+- La route POST /scan nécessitait un proxy resilient (retry sur timeout)
+
+════════════════════════════════════════════════════════════════════════════════
+BACKEND FASTAPI — DÉTAIL TECHNIQUE
+════════════════════════════════════════════════════════════════════════════════
+
+STRUCTURE :
+```
+backend/
+├── app/
+│   ├── main.py              ← FastAPI app + CORS + lifespan MongoDB
+│   ├── api/
+│   │   ├── scan.py          ← POST /scan, GET /scan/status
+│   │   ├── analyses.py      ← GET /analyses, GET /analyses/{id}
+│   │   └── reports.py       ← GET /analyses/{id}/rapport
+│   ├── services/
+│   │   ├── aggregator.py    ← normalisation + déduplication + scoring
+│   │   ├── mythril_service.py
+│   │   ├── slither_service.py
+│   │   ├── solhint_service.py
+│   │   ├── echidna_service.py
+│   │   ├── foundry_service.py
+│   │   ├── ai_service.py    ← bridge vers le module GNN
+│   │   └── report_generator.py ← PDF + Markdown
+│   └── database/
+│       └── mongodb.py       ← connexion Motor async
+└── gnn_module/              ← module IA propriétaire
+    ├── ai_service.py
+    ├── gnn_service.py
+    └── src/
+        ├── config.py
+        ├── live_extractor.py
+        ├── live_vectorizer.py
+        ├── predict.py
+        └── models/
+            └── gnn_model.py
+```
+
+PIPELINE D'ANALYSE (scan.py) :
+
+Étape 1 — Validation :
+- Extension autorisée : .sol ou .vy
+- Verrou global asyncio (_scan_lock) : une seule analyse à la fois
+- Si verrou occupé → HTTP 409 avec message explicite
+
+Étape 2 — Écriture temporaire :
+- tempfile.NamedTemporaryFile() avec suffixe .sol/.vy
+- Supprimé à la fin dans un bloc finally
+
+Étape 3 — Exécution parallèle des outils :
+```python
+with ThreadPoolExecutor(max_workers=5) as executor:
+    futures = {executor.submit(_run_tool, name, fn, path): name ...}
+```
+Outils disponibles selon l'extension et la sélection :
+- .sol : mythril, slither, solhint, echidna, foundry
+- .vy  : mythril, slither uniquement
+
+Sélection des outils depuis le frontend :
+- Le frontend envoie un paramètre `tools` (JSON array) dans le form-data
+- Ex: ["slither", "solhint", "ai"] pour analyse statique seule + IA
+- None ou absent = tous les outils disponibles
+
+Étape 4 — Agrégation (aggregator.py) :
+- normalize_issue() : normalise les champs (title, description, severity,
+  line, swcId, tool, confidence) pour chaque issue de chaque outil
+- Normalisation de la sévérité : high→critical, informational→low
+- _deduplicate() : déduplique par (titre_tronqué[:60], numéro_ligne)
+  En cas de doublon, conserve la sévérité la plus haute
+- compute_score() : 100 - criticals×30 - mediums×15 - lows×5, min 0
+
+Étape 5 — Analyse GNN (optionnelle) :
+Si "ai" dans les outils demandés ET is_available() == True :
+- ai_service.analyze_contract(path, issues) est appelé
+- Les issues CONFIRMED (outil + GNN d'accord) ont confirmedByGnn=True
+- Les issues POTENTIAL (GNN seul, confiance > 80%) sont ajoutées
+- Les issues FILTERED (outil signalé, GNN détecte une protection) sont
+  notées mais non comptées dans le score
+- compute_score_weighted() recalcule le score avec ×1.5 sur les CONFIRMED
+
+Étape 6 — Sauvegarde MongoDB :
+```python
+doc = {
+    "filename": filename,
+    "code": code,
+    "score": score,
+    "issues": issues,        # description + tous les champs GNN
+    "summary": summary,
+    "tools_used": tools_used,
+    "tools_errors": tools_errors,
+    "tools_versions": tools_versions,
+    "ai_verdict": ai_verdict,
+    "raw_tool_results": raw_results,
+    "analyzed_at": datetime.utcnow(),
+    "status": "completed"
+}
+```
+- Graceful degradation : si MongoDB est indisponible, le scan retourne quand
+  même le résultat (erreur loggée, sans id)
+
+OUTILS D'ANALYSE — DÉTAIL :
+
+Mythril (mythril_service.py) :
+- Analyse symbolique du bytecode EVM via l'exécutable `myth`
+- Utilise un venv dédié (.venv-mythril) pour isoler les dépendances conflictuelles
+  (coincurve<21, eth-hash, setuptools==68.2.2 pour pkg_resources sur Python 3.13)
+- Commande : myth analyze <file> --execution-timeout 60 --json
+- Timeout 180s via signal.alarm
+- Détecte : reentrancy, integer overflow, selfdestruct, tx.origin, timestamp, etc.
+
+Slither (slither_service.py) :
+- Analyseur statique Python, intégré directement dans le venv principal
+- API Python native : Slither(path) plutôt qu'un sous-processus
+- Détecteurs : reentrancy, uninitialized-state, arbitrary-send-eth, etc.
+- Extrait SWC-ID, numéro de ligne, niveau de confiance
+
+Solhint (solhint_service.py) :
+- Linter Solidity (Node.js, installé globalement via npm install -g solhint)
+- Appel subprocess : solhint --formatter json <file>
+- Catégories : best-practices, security, gas-consumption, style
+- Les rules de sécurité sont mappées vers les SWC correspondants
+
+Echidna (echidna_service.py) :
+- Fuzzer de smart contracts (Haskell, installé via brew install echidna)
+- Génère des séquences de transactions aléatoires
+- Les violations sont rapportées en sévérité "medium"
+- Timeout 60s, mode coverage
+
+Foundry (foundry_service.py) :
+- Framework de test Solidity
+- Commandes forge build + forge test
+- Extraction des numéros de ligne depuis formattedMessage via regex :
+  re.search(r':(\d+):\d+:', fmt_msg)
+
+AGRÉGATEUR — ALGORITHME DE DÉDUPLICATION :
+```python
+key = (issue["title"].lower()[:60], issue["line"])
+# Si même (titre, ligne) → garder la sévérité la plus haute
+```
+Cela évite que Mythril et Slither remontent la même reentrancy deux fois.
+
+SCORE DE SÉCURITÉ — FORMULE :
+```
+score = max(0, min(100, 100 - Σ pénalités))
+
+pénalités :
+  critical non-GNN : 30 pts
+  medium   non-GNN : 15 pts
+  low      non-GNN :  5 pts
+  critical GNN-confirmed : 45 pts (×1.5)
+  medium   GNN-confirmed : 22 pts (×1.5, arrondi)
+  low      GNN-confirmed :  7 pts (×1.5, arrondi)
+```
+
+════════════════════════════════════════════════════════════════════════════════
+MODULE GNN — INTELLIGENCE ARTIFICIELLE
+════════════════════════════════════════════════════════════════════════════════
+
+C'est la pièce maîtresse différenciante de SafeContract. Le module GNN est
+entièrement propriétaire, développé de zéro par l'équipe.
+
+PROBLÈME ADRESSÉ :
+Les outils classiques (Mythril, Slither) analysent le code de façon linéaire
+ou symbolique mais peinent à comprendre le contexte structurel :
+- Mythril génère des faux positifs sur les patterns CEI bien implémentés
+- Slither signale des reentrancies protégées par ReentrancyGuard
+Le GNN analyse le graphe de flux de contrôle (CFG) pour valider ou invalider
+les alertes des outils.
+
+ARCHITECTURE DU MODÈLE (SmartContractGNN) :
+
+```
+Entrée : vecteur de 786 dimensions par nœud du CFG
+  = 768 dim CodeBERT (représentation sémantique du code)
+  + 18 dim features expertes (règles binaires hand-crafted)
+
+Couche 0 : LayerNorm(786)
+Couche 1 : GATConv(786 → 128, heads=4, concat=True) → 512 dim
+           + LayerNorm(512) + ELU + Dropout(0.2)
+Couche 2 : GATConv(512 → 128, heads=1, concat=False) → 128 dim
+           + LayerNorm(128)
+Skip connection : Linear(786 → 128) [connexion résiduelle]
+Fusion : ELU(x_graphe + identite_brute) + Dropout(0.2)
+Classifieur : Linear(128 → 2) [vulnérable / sain]
+```
+
+Justification des choix architecturaux :
+- GATConv (Graph Attention Network) : les têtes d'attention permettent au modèle
+  de pondérer l'importance des nœuds voisins (ex. : un nœud require() est plus
+  important qu'un nœud de commentaire pour évaluer la sécurité d'un call)
+- Connexion résiduelle (skip connection) : évite la disparition du gradient
+  dans les réseaux profonds et préserve l'identité locale du nœud
+- LayerNorm plutôt que BatchNorm : adapté aux graphes de tailles variables
+- ELU plutôt que ReLU : continuité en 0 et gradients négatifs pour mieux
+  représenter les absences de patterns
+
+FEATURES EXPERTES (18 dimensions) :
+Les 18 dimensions binaires capturent des patterns de sécurité connus :
+0  : présence de call.value / send() / transfer()
+1  : présence de msg.sender
+2  : présence de require / assert / revert
+3  : présence de selfdestruct
+4  : présence de delegatecall
+5-8: (réservé V7)
+9  : présence de block.timestamp / now
+10 : (réservé)
+11 : opérations arithmétiques (+, -, *, /)
+12 : boucles (for, while)
+13-15 : (réservé)
+16 : présence de ecrecover / verify()
+17 : présence de nonce / usedSignatures / executed[]
+
+EXTRACTION DU CFG (live_extractor.py) :
+- Utilise Slither en API Python pour construire le CFG
+- Pour chaque fonction du contrat :
+  - Extrait les nœuds du CFG (type + contenu)
+  - Extrait les arêtes (flux de contrôle)
+- Gestion des imports manquants : génération de stubs Solidity synthétiques
+  via inférence de types (adresse, bool, uint256, bytes)
+- Format de sortie JSON :
+  ```json
+  {
+    "NomContrat": {
+      "graphe_noeuds": [{"type": "...", "contenu": "..."}],
+      "aretes": [[0, 1], [1, 2], ...]
+    }
+  }
+  ```
+
+VECTORISATION (live_vectorizer.py) :
+- Charge CodeBERT (microsoft/codebert-base, 125M paramètres)
+- Pour chaque nœud : tokenisation (max_length=128) + mean pooling → 768 dim
+- Concaténation avec le vecteur expert 18 dim → 786 dim
+- Sauvegarde en .pt (tenseur PyTorch)
+
+PRÉDICTION ET FILTRE TOPOLOGIQUE (predict.py) :
+La logique de prédiction comporte deux couches de filtrage :
+
+Couche 1 — Filtre opérations dangereuses :
+Ne traiter que les nœuds contenant une opération à risque :
+- .call{, msg.sender.call, .send(, .transfer(
+- ecrecover, selfdestruct, delegatecall, tx.origin
+- block.timestamp, blockhash, block.difficulty, block.prevrandao
+- unchecked, swapExactTokens, latestRoundData
+
+Couche 2 — BFS arrière/avant sur le CFG :
+- Reentrancy : BFS arrière → si un ancêtre contient nonReentrant,
+  _status != 2, ReentrancyGuard → alerte FILTRÉE
+- Signature Replay : BFS → si nonce / usedSignatures / executed[] présent
+  → alerte FILTRÉE
+- ecrecover : BFS avant → vérification address(0) présente → FILTRÉE
+
+Niveaux de confiance du rapport :
+- CONFIRMED  : au moins 1 outil ET GNN concordent → vulnérabilité certaine
+- POTENTIAL  : GNN seul avec confiance ≥ 80% → possible vulnérabilité
+- FILTERED   : outil a signalé MAIS GNN détecte une protection → faux positif
+
+Vulnérabilités couvertes :
+- SWC-107 : Reentrancy
+- SWC-115 : Authorization via tx.origin
+- SWC-122 : Lack of Signature Verification
+- SWC-116 : Timestamp Dependence
+- SWC-120 : Weak Randomness
+- SWC-101 : Integer Overflow/Underflow
+- SWC-113 : Denial of Service
+- SWC-106 : Unprotected SELFDESTRUCT
+- SWC-112 : Delegatecall to Untrusted Callee
+- SWC-104 : Unchecked Return Value
+- Unprotected ETH Withdrawal
+
+VERSION DU MODÈLE :
+- gnn_smart_contracts_v6_retrain.pth (poids entraînés, figés)
+- DIM_TOTALE=786, HEADS=4, SEUIL_DEFAUT=0.60
+- Entraîné sur un dataset de smart contracts Solidity annotés
+
+INTÉGRATION DANS LE PIPELINE :
+```
+scan.py appelle ai_service.analyze_contract(path, issues_agregées)
+  ↓
+ai_service charge le module GNN via sys.path + import tardif
+  ↓
+gnn_service.analyser_contrat(path, rapport_json)
+  ↓
+live_extractor : CFG extraction (Slither API)
+  ↓
+live_vectorizer : CodeBERT + features expertes → tenseur 786D
+  ↓
+predict : GNN forward pass + filtres topologiques
+  ↓
+Retour : { verdict, score, explanation, issues_avec_niveaux }
+  ↓
+scan.py enrichit les issues (confirmedByGnn, gnnConfidence, gnnDescription)
+         recalcule le score avec compute_score_weighted()
+```
+
+════════════════════════════════════════════════════════════════════════════════
+BASE DE DONNÉES MONGODB
+════════════════════════════════════════════════════════════════════════════════
+
+Driver : Motor (AsyncIOMotorClient) — driver async officiel MongoDB pour Python
+Base : safecontract
+Collection : analyses
+
+Schema d'un document :
+```json
+{
+  "_id": "ObjectId",
+  "filename": "MonContrat.sol",
+  "code": "// Solidity source complet...",
+  "score": 72,
+  "issues": [
+    {
+      "line": 14,
+      "severity": "critical",
+      "title": "Reentrancy",
+      "description": "External call before state update",
+      "swcId": "SWC-107",
+      "tool": "mythril",
+      "confirmedByGnn": true,
+      "gnnConfidence": "0.92",
+      "gnnDescription": "Le graphe CFG montre un appel externe..."
+    }
+  ],
+  "summary": { "critical": 1, "medium": 0, "low": 2, "total": 3 },
+  "tools_used": ["mythril", "slither", "ai"],
+  "tools_errors": { "echidna": "timeout" },
+  "tools_versions": { "mythril": "0.24.8", "slither": "0.10.1" },
+  "ai_verdict": {
+    "verdict": "vulnerable",
+    "score": 87,
+    "explanation": "Le GNN détecte une reentrancy non protégée..."
+  },
+  "raw_tool_results": {},
+  "analyzed_at": "ISODate(2024-03-15T14:23:11Z)",
+  "status": "completed"
+}
+```
+
+Graceful degradation :
+- Si MongoDB est indisponible au démarrage → lifespan FastAPI log l'erreur
+  mais le serveur démarre quand même
+- Si la sauvegarde échoue → le résultat du scan est retourné sans id
+- GET /analyses retourne [] si MongoDB est hors ligne
+- Le frontend gère l'absence d'id (pas de lien vers le rapport PDF)
+
+════════════════════════════════════════════════════════════════════════════════
+GÉNÉRATION DE RAPPORTS
+════════════════════════════════════════════════════════════════════════════════
+
+report_generator.py génère deux formats :
+
+MARKDOWN :
+- Structuré avec sections numérotées (résumé, synthèse, findings, méthodologie)
+- Compatible GitHub, exportable, versionnable
+- Chaque finding détaillé avec SWC, outil, ligne, explication, recommandation
+
+PDF (WeasyPrint) :
+Nouvelle structure depuis la v2 :
+1. Couverture pleine page (@page cover { margin: 0 })
+   - Fond dégradé #0a1628 → #0f2040 (identité visuelle SafeContract)
+   - Logo, titre, KPIs (score, verdict IA, nb findings, date)
+   - Pied de page confidentiel
+2. Pagination A4 avec WeasyPrint @page rules
+   - Numéro de page centré (Page X / N)
+   - Titre du rapport en bas gauche, date en bas droite
+3. Sommaire (TOC)
+4. Résumé exécutif + statistiques en 4 cartes colorées
+5. Avertissement sur la fiabilité (fond ambre, liste des limites)
+6. Méthode de calcul du score (pénalités + pondération GNN)
+7. Outils utilisés (tableau avec type, version, description)
+8. Tableau de synthèse (en-tête sombre, toutes les vulnérabilités)
+9. Findings détaillés (1 carte par finding, page-break-inside: avoid)
+
+Anti-coupure des tableaux :
+- page-break-inside: avoid sur chaque finding card et chaque table
+- page-break-after: avoid sur les titres de section
+- Les tableaux s'interrompent jamais au milieu d'une ligne
+
+Enrichissement LLM (optionnel) :
+- Si Ollama est installé et le modèle mistral disponible :
+  - _llm_resume_executif() : résumé exécutif 3 paragraphes
+  - _llm_detail_finding() : explication + impact + recommandation par finding
+- Fallback statique depuis la base SWC si LLM indisponible
+- Timeout configurable (RAPPORT_LLM_TIMEOUT, défaut 120s)
+
+════════════════════════════════════════════════════════════════════════════════
+DÉFIS TECHNIQUES ET SOLUTIONS
+════════════════════════════════════════════════════════════════════════════════
+
+1. ISOLATION DE MYTHRIL (Python 3.13 + setuptools)
+   Problème : Mythril dépend de pkg_resources qui n'est plus exposé comme
+   module top-level dans setuptools ≥ 69 sur Python 3.13.
+   Solution : venv dédié .venv-mythril avec setuptools==68.2.2 + coincurve<21.
+   Le chemin vers l'exécutable myth est passé via la variable d'environnement
+   MYTH_BINARY dans ecosystem.config.cjs.
+
+2. CONFLIT DE DÉPENDANCES PYTHON
+   Problème : Mythril, Slither, torch-geometric, weasyprint ont des dépendances
+   incompatibles si installées ensemble (eth-hash, coincurve, abi versions).
+   Solution : installation en groupes séquentiels, mythril isolé dans .venv-mythril,
+   sans requirements.txt global (graph de dépendances trop complexe).
+
+3. PROXY ZUPLO ET RÉPONSES NON-JSON
+   Problème : les erreurs FastAPI en debug renvoient du HTML, crashant le
+   JSON.parse() côté frontend.
+   Solution : lecture systématique en texte (await res.text()) avant tentative
+   de JSON.parse(), avec message d'erreur explicite si HTML reçu.
+
+4. SCAN CONCURRENT
+   Problème : lancer deux analyses en parallèle sur le même serveur VPS
+   (mémoire limitée) provoquait des crashes.
+   Solution : asyncio.Lock() global + endpoint GET /scan/status pour que le
+   frontend sache si un scan est en cours et affiche un indicateur.
+
+5. SORT DE L'HISTORIQUE PAR DATE
+   Problème : tri alphabétique sur les chaînes de dates localisées (ex. "31 mars"
+   vs "3 avril") donnait un ordre incorrect.
+   Solution : ajout du champ rawDate (ISO 8601) dans la timeline,
+   tri via new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime().
+
+6. PAGINATION DE L'HISTORIQUE
+   Problème : avec de nombreuses analyses, la liste s'étendait indéfiniment.
+   Solution : pagination côté client (HIST_PER_PAGE=10, état histPage),
+   reset automatique à la page 1 lors du changement d'onglet.
+
+7. IMPORT MANQUANTS DANS LE CFG (GNN)
+   Problème : les contrats importent des interfaces externes (OpenZeppelin, etc.)
+   non présentes dans le fichier analysé, bloquant Slither.
+   Solution : live_extractor.py génère des stubs Solidity synthétiques par
+   inférence de types sur les arguments d'appels.
+
+8. WEASYPRINT SUR LINUX (libpango)
+   Problème : WeasyPrint nécessite des bibliothèques système (libpango, harfbuzz).
+   Solution : sudo apt install -y libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0
+   dans le script de déploiement.
+
+9. SET<STRING> SPREAD EN TYPESCRIPT
+   Problème : [...new Set(array)] cause une erreur TypeScript strict.
+   Solution : Array.from(new Set(array))
+
+10. NOMMAGE DES CONTRATS COLLÉS
+    Problème : la regex /contract\s+(\w+)/ matchait les commentaires
+    (ex. "// Define contract name" → nom = "name")
+    Solution : /^\s*contract\s+(\w+)/m (mode multiline, ^ = début de ligne)
+
+════════════════════════════════════════════════════════════════════════════════
+SÉCURITÉ DE LA PLATEFORME ELLE-MÊME
+════════════════════════════════════════════════════════════════════════════════
+
+Mesures implémentées :
+- Validation de l'extension (.sol/.vy uniquement) côté backend
+- Écriture dans tempfile (répertoire /tmp, nettoyage garanti en finally)
+- Verrou global scan (protection contre les attaques par saturation)
+- Pas de persistance du code source en dehors de MongoDB (chiffrement à envisager)
+- CORS configuré dans FastAPI (origines autorisées limitées)
+- Headers de sécurité via Caddy (HSTS, X-Frame-Options)
+
+Limitations actuelles (à adresser en v2) :
+- Authentification frontend hardcodée (admin/admin) → doit être remplacée
+  par JWT + OAuth réel (GitHub, Google)
+- Pas de rate limiting par utilisateur sur les scans
+- Le code source du contrat est stocké en clair en MongoDB
+- Pas de sandbox pour l'exécution des outils d'analyse
+- Pas de validation antivirale sur les fichiers uploadés
+
+════════════════════════════════════════════════════════════════════════════════
+PERFORMANCES ET SCALABILITÉ
+════════════════════════════════════════════════════════════════════════════════
+
+Temps d'analyse typiques (VPS 2 vCPU / 4 Go RAM) :
+- Slither seul : 3–8 secondes
+- Solhint seul : < 1 seconde
+- Mythril (60s timeout) : 60–90 secondes
+- Echidna (60s timeout) : 60–70 secondes
+- Foundry : 5–15 secondes
+- GNN : 20–45 secondes (dépend de la taille du contrat + CodeBERT)
+- Pipeline complet : 90–180 secondes
+
+Optimisations en place :
+- Exécution parallèle des outils (ThreadPoolExecutor, max_workers=5)
+- Précalcul LLM unique (_precalculer_llm) pour éviter les doubles appels
+- Cache des résultats GNN par session (pas de ré-analyse à chaque requête PDF)
+- Index MongoDB sur analyzed_at (tri historique)
+- Streaming du scan status via polling (GET /scan/status) côté frontend
+
+Limites de scalabilité :
+- Un seul scan à la fois (verrou global)
+- GNN charge CodeBERT en mémoire pour chaque analyse (~500 Mo VRAM/RAM)
+- Mythril est CPU-intensif (analyse symbolique complète du bytecode)
+- Pour passer à l'échelle : worker queue (Celery + Redis), instances multiples
+
+════════════════════════════════════════════════════════════════════════════════
+STRUCTURE DU RAPPORT À PRODUIRE
+════════════════════════════════════════════════════════════════════════════════
+
+Génère un rapport Markdown structuré d'au moins 20 pages couvrant :
+
+1. PAGE DE GARDE
+   - Titre, sous-titre, équipe (Bastien, Géraud, Pierre-Henri), école (ESME),
+   - Date, version (v1.0)
+
+2. SOMMAIRE DÉTAILLÉ (numéroté)
+
+3. RÉSUMÉ EXÉCUTIF (1 page)
+   - Problème adressé, solution, valeur apportée, résultats clés
+
+4. CONTEXTE ET ENJEUX (1–2 pages)
+   - Marché des smart contracts (TVL DeFi, statistiques hacks)
+   - Coût et inaccessibilité des audits manuels
+   - Opportunité d'automatisation
+
+5. PRÉSENTATION DU PROJET (1 page)
+   - Vision, positionnement, équipe, planning
+
+6. ARCHITECTURE GÉNÉRALE (2 pages)
+   - Schéma ASCII de l'architecture 4 couches
+   - Justification des choix technologiques (Next.js vs React, FastAPI vs Flask,
+     Zuplo vs Express, MongoDB vs PostgreSQL)
+   - Flux de données détaillé
+
+7. FRONTEND (2 pages)
+   - Stack et structure Next.js 14 App Router
+   - Design system (couleurs, typographie, animations WebGL SoftAurora)
+   - Dashboard : architecture des composants, UX des 4 onglets
+   - Détail technique CodeDiagnostic et l'animation des findings
+
+8. API GATEWAY ZUPLO (1 page)
+   - Rôle, routes, avantages spec-first
+   - Gestion des erreurs et resilience
+
+9. BACKEND FASTAPI (2 pages)
+   - Structure du code, endpoints
+   - Pipeline d'analyse détaillé (étapes 1–6)
+   - Parallélisation et gestion des timeouts
+   - Aggregateur : normalisation, déduplication, scoring
+
+10. OUTILS D'ANALYSE (2 pages)
+    - Description détaillée de chaque outil (Mythril, Slither, Solhint,
+      Echidna, Foundry) : fonctionnement, type d'analyse, limites
+    - Tableau comparatif
+    - Gestion de l'isolation Mythril (venv dédié, Python 3.13)
+
+11. INTELLIGENCE ARTIFICIELLE — MODULE GNN (3 pages)
+    - Introduction aux GNN et Graph Attention Networks
+    - Justification du choix GNN pour les smart contracts
+    - Architecture complète SmartContractGNN (schéma ASCII)
+    - Construction du CFG via Slither
+    - Vectorisation CodeBERT + features expertes (18 dim, détail de chaque dim)
+    - Filtre topologique (Couche 1 et Couche 2 BFS)
+    - Niveaux de confiance CONFIRMED/POTENTIAL/FILTERED
+    - Intégration dans le pipeline de scan
+    - Résultats et métriques (si disponibles)
+
+12. BASE DE DONNÉES ET PERSISTANCE (1 page)
+    - Choix MongoDB, driver Motor async
+    - Schéma du document analyse
+    - Graceful degradation
+
+13. GÉNÉRATION DE RAPPORTS PDF (1 page)
+    - Architecture du rapport PDF (WeasyPrint)
+    - Sections du rapport, anti-coupure des tableaux
+    - Enrichissement LLM (Ollama + Mistral)
+    - Format Markdown
+
+14. DÉPLOIEMENT ET INFRASTRUCTURE (1 page)
+    - Architecture serveur (VPS Linux, Caddy, PM2)
+    - Process PM2 et configuration
+    - Procédure de déploiement (deploy.sh)
+    - Variables d'environnement et secrets
+
+15. DÉFIS TECHNIQUES ET SOLUTIONS (1–2 pages)
+    - Les 10 défis listés ci-dessus, avec explication du problème et solution
+
+16. SÉCURITÉ DE LA PLATEFORME (1 page)
+    - Mesures en place
+    - Limitations actuelles et roadmap de sécurisation
+
+17. PERFORMANCES ET SCALABILITÉ (1 page)
+    - Temps d'analyse, optimisations, limites
+
+18. PERSPECTIVES ET ROADMAP (1 page)
+    - Authentification réelle (OAuth2 + JWT)
+    - Rate limiting par utilisateur
+    - Support Vyper complet
+    - Multi-chain (non-EVM : Solana, Cosmos)
+    - Fine-tuning du GNN sur dataset plus large
+    - Interface CI/CD (GitHub Actions integration)
+    - Version API publique avec clés API
+
+19. CONCLUSION (1 page)
+    - Bilan technique, valeur apportée, apprentissages
+
+20. ANNEXES
+    - Glossaire technique (SWC, CFG, GNN, GAT, etc.)
+    - Liste des dépendances principales avec versions
+    - Références bibliographiques
+
+════════════════════════════════════════════════════════════════════════════════
+INSTRUCTIONS DE STYLE
+════════════════════════════════════════════════════════════════════════════════
+
+- Rédige en français académique et professionnel
+- Utilise des schémas ASCII pour les architectures (boîtes, flèches)
+- Include des extraits de code (Python, TypeScript, Solidity) pour illustrer
+  les concepts clés — les blocs de code comptent dans la longueur
+- Chaque section doit avoir une introduction et une conclusion/transition
+- Le ton doit être technique mais accessible (jury mixte technique + managérial)
+- Évite la répétition, chaque section apporte une information nouvelle
+- Minimum 20 pages, vise 25 pages
+
+Commence directement par le rapport, sans préambule.
+================================================================================
