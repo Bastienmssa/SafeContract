@@ -27,7 +27,15 @@ def _normalize_severity(raw: str) -> str:
 
 def normalize_issue(issue: dict, tool: str) -> dict:
     severity_raw = issue.get("severity", "low")
-    severity = _normalize_severity(severity_raw)  # appliqué à tous les outils
+    severity = _normalize_severity(severity_raw)
+
+    swc_id = f"SWC-{issue['swc-id']}" if issue.get("swc-id") else issue.get("swcId", "")
+
+    # SWC-116 (Timestamp Dependence) : risque lié à la manipulation par des
+    # validateurs majoritaires, non exploitable dans les conditions normales.
+    # Sévérité plafonnée à "low" quelle que soit la détection brute de l'outil.
+    if swc_id == "SWC-116" and severity in ("critical", "medium"):
+        severity = "low"
 
     return {
         "tool": issue.get("tool", tool),
@@ -35,22 +43,25 @@ def normalize_issue(issue: dict, tool: str) -> dict:
         "description": issue.get("description") or issue.get("desc", ""),
         "severity": severity,
         "line": issue.get("lineno") or issue.get("line"),
-        "swcId": (
-            f"SWC-{issue['swc-id']}" if issue.get("swc-id") else issue.get("swcId", "")
-        ),
+        "swcId": swc_id,
         "confidence": issue.get("confidence", ""),
     }
 
 
 # ─── Calcul du score de sécurité ─────────────────────────────────────────────
 # Convention : 100 = contrat sain, 0 = contrat très vulnérable.
-# Pénalités : critical -30, medium -15, low -5.
+# Pénalités : critical -20, medium -10, low -3.
+
+_PENALTY = {"critical": 20, "medium": 10, "low": 3}
+
 
 def compute_score(issues: list[dict]) -> int:
     criticals = sum(1 for i in issues if i["severity"] == "critical")
     mediums   = sum(1 for i in issues if i["severity"] == "medium")
     lows      = sum(1 for i in issues if i["severity"] == "low")
-    return max(0, min(100, 100 - criticals * 30 - mediums * 15 - lows * 5))
+    return max(0, min(100, 100 - criticals * _PENALTY["critical"]
+                               - mediums   * _PENALTY["medium"]
+                               - lows      * _PENALTY["low"]))
 
 
 def compute_score_weighted(issues: list[dict]) -> int:
@@ -61,12 +72,8 @@ def compute_score_weighted(issues: list[dict]) -> int:
     score = 100
     for i in issues:
         weight = 1.5 if i.get("confirmedByGnn") else 1.0
-        if i["severity"] == "critical":
-            score -= int(30 * weight)
-        elif i["severity"] == "medium":
-            score -= int(15 * weight)
-        elif i["severity"] == "low":
-            score -= int(5 * weight)
+        penalty = _PENALTY.get(i["severity"], 0)
+        score -= int(penalty * weight)
     return max(0, min(100, score))
 
 

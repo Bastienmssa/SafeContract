@@ -166,8 +166,8 @@ _SWC_DB = {
     },
     "SWC-116": {
         "nom":      "Timestamp Dependence",
-        "risque":   "Les mineurs peuvent manipuler block.timestamp de quelques secondes.",
-        "correctif":"Ne pas utiliser block.timestamp pour des décisions critiques (tirages, loteries, timelock).",
+        "risque":   "block.timestamp peut être légèrement manipulé par un validateur (quelques secondes). Ce risque est faible en pratique : une attaque nécessite de contrôler la majorité du réseau Ethereum.",
+        "correctif":"Éviter block.timestamp pour des décisions critiques de type loterie ou randomness. Pour des calculs temporels métier (harvest, deadline), l'usage est généralement acceptable avec documentation des hypothèses.",
         "ref":      "https://swcregistry.io/docs/SWC-116",
     },
     "SWC-120": {
@@ -645,7 +645,11 @@ def _construire_html_ia(infos: dict) -> str:
         v_score  = ai_verdict.get("score")
         v_expl   = ai_verdict.get("explanation", "")
         v_color  = "#dc2626" if v == "VULNERABLE" else "#16a34a"
-        score_pct = f"{int(float(v_score) * 100)}%" if v_score is not None else "N/A"
+        if v_score is not None:
+            _s = float(v_score)
+            score_pct = f"{int(_s)}%" if _s > 1 else f"{int(_s * 100)}%"
+        else:
+            score_pct = "N/A"
         parts.append(f"""
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;
                 border-radius:6px;padding:16px 20px;margin-bottom:20px;page-break-inside:avoid;">
@@ -1230,23 +1234,28 @@ def _construire_html(infos: dict) -> str:
     </p>
     <div class="penalty-grid">
       <div class="penalty-item" style="background:#fef2f2;border:1px solid #fca5a5;">
-        <div class="penalty-num" style="color:#dc2626;">−30</div>
+        <div class="penalty-num" style="color:#dc2626;">−20</div>
         <div class="penalty-lbl" style="color:#dc2626;">par Critique</div>
       </div>
       <div class="penalty-item" style="background:#fffbeb;border:1px solid #fcd34d;">
-        <div class="penalty-num" style="color:#d97706;">−15</div>
+        <div class="penalty-num" style="color:#d97706;">−10</div>
         <div class="penalty-lbl" style="color:#d97706;">par Moyen</div>
       </div>
       <div class="penalty-item" style="background:#f0fdf4;border:1px solid #86efac;">
-        <div class="penalty-num" style="color:#16a34a;">−5</div>
+        <div class="penalty-num" style="color:#16a34a;">−3</div>
         <div class="penalty-lbl" style="color:#16a34a;">par Faible</div>
       </div>
     </div>
     <p style="margin:14px 0 0;font-size:12px;color:#0369a1;">
       <strong>Pondération GNN :</strong> lorsque le modèle GNN confirme une vulnérabilité détectée
       par un outil, la pénalité est multipliée par 1,5 (ex. : une critique confirmée par le GNN
-      retire 45 points au lieu de 30). Cela reflète la plus haute fiabilité du verdict croisé
+      retire 30 points au lieu de 20). Cela reflète la plus haute fiabilité du verdict croisé
       outil + IA.
+    </p>
+    <p style="margin:8px 0 0;font-size:12px;color:#0369a1;">
+      <strong>Note :</strong> SWC-116 (Timestamp Dependence) est systématiquement classé en
+      sévérité <em>Faible</em> — ce vecteur d'attaque nécessite qu'un validateur contrôle la
+      majorité du réseau Ethereum, ce qui le rend non exploitable dans des conditions normales.
     </p>
     <p style="margin:10px 0 0;font-size:12px;color:#0369a1;">
       <strong>Score obtenu pour ce contrat :</strong>
