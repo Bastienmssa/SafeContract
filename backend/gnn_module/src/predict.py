@@ -45,6 +45,21 @@ _OPS_DANGEREUSES = [
     "latestrounddata",
 ]
 
+# Patterns block.timestamp qui sont sans risque (calcul d'intervalle, deadline, event)
+# Un noeud contenant UNIQUEMENT ces patterns n'est pas considere dangereux (SWC-116).
+_TIMESTAMP_SURS = [
+    "block.timestamp -",    # elapsed / harvest interval
+    "block.timestamp +",    # deadline future (permit, swap deadline)
+    "block.timestamp >=",   # borne temporelle acceptable
+    "block.timestamp <=",   # borne temporelle acceptable
+    "block.timestamp ==",   # comparaison directe (event)
+    "lastharvest",          # harvest interval
+    "lasttimestamp",        # interval generique
+    "deadline",             # permit EIP-2612, Uniswap deadline
+    "expir",                # expiration de signature
+    "emit ",                # horodatage d'evenement seulement
+]
+
 _PROTECTIONS_REENTRANCY = [
     "nonreentrant",
     "_status != 2",
@@ -233,11 +248,23 @@ def _est_operation_dangereuse(noeud: dict) -> bool:
     texte = (noeud.get("contenu", "") + " " + noeud.get("type", "")).lower()
     if not any(op in texte for op in _OPS_DANGEREUSES):
         return False
-    # Raffinement SWC-116 : block.timestamp >= est un delai acceptable
+
+    # Raffinement SWC-116 : block.timestamp n'est dangereux que dans un contexte
+    # de randomness ou de decision critique (keccak, %, encodePacked).
+    # Les usages en intervalle, deadline ou horodatage d'evenement sont acceptables.
     autres = [op for op in _OPS_DANGEREUSES if op != "block.timestamp"]
     if "block.timestamp" in texte and not any(op in texte for op in autres):
-        if ">=" in texte and "==" not in texte:
+        # Dangereux si combine avec des patterns de randomness
+        if any(danger in texte for danger in ["keccak256", "random", "abi.encodepacked", "% "]):
+            return True
+        # Acceptable si c'est un intervalle, deadline ou evenement
+        if any(safe in texte for safe in _TIMESTAMP_SURS):
             return False
+        # Acceptable si le noeud est un simple retour ou expression
+        type_noeud = noeud.get("type", "").lower()
+        if type_noeud in ("nodetype.expression", "nodetype.return"):
+            return False
+
     return True
 
 
